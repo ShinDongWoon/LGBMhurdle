@@ -150,7 +150,7 @@ def run_train(cfg: dict):
                         reg,
                         threshold=0.5,
                         horizon=H,
-                        feature_cols=feature_cols_tr,
+                        feature_cols=reg.feature_names_,
                         categorical_cols=categorical_cols_tr,
                     )
             if skip_fold:
