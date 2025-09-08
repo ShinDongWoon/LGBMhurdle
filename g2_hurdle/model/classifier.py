@@ -18,7 +18,11 @@ class HurdleClassifier:
 
     def fit(self, X_train, y_train, X_val=None, y_val=None, early_stopping_rounds=100):
         y_train_bin = (y_train > 0).astype(int)
-        fit_params = {}
+        fit_params = {
+            "categorical_feature": self.categorical_feature,
+        }
+        if hasattr(X_train, "columns"):
+            fit_params["feature_name"] = list(X_train.columns)
         if X_val is not None and y_val is not None:
             fit_params["eval_set"] = [(X_val, (y_val > 0).astype(int))]
             if early_stopping_rounds > 0:
