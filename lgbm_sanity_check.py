@@ -156,7 +156,7 @@ def train_lgbm(args, X, y, trn_idx, val_idx):
         valid_sets=[dtrain, dvalid],
         valid_names=["train","valid"],
         num_boost_round=5000,
-        early_stopping_rounds=200,
+        callbacks=[lgb.early_stopping(200)],
         keep_training_booster=True,
     )
     return model
