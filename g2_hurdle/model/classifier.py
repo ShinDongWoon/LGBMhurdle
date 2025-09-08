@@ -3,8 +3,10 @@ from typing import Optional, Sequence
 import numpy as np
 
 try:
+    import lightgbm
     from lightgbm import LGBMClassifier
 except Exception as e:
+    lightgbm = None
     LGBMClassifier = None
 
 class HurdleClassifier:
@@ -19,7 +21,10 @@ class HurdleClassifier:
         fit_params = {}
         if X_val is not None and y_val is not None:
             fit_params["eval_set"] = [(X_val, (y_val > 0).astype(int))]
-            fit_params["early_stopping_rounds"] = early_stopping_rounds
+            if early_stopping_rounds > 0:
+                callbacks = fit_params.get("callbacks", [])
+                callbacks.append(lightgbm.early_stopping(early_stopping_rounds))
+                fit_params["callbacks"] = callbacks
         self.model.fit(X_train, y_train_bin, **fit_params)
 
     def predict_proba(self, X):

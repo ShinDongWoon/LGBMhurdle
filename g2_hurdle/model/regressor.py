@@ -3,8 +3,10 @@ from typing import Optional, Sequence
 import numpy as np
 
 try:
+    import lightgbm
     from lightgbm import LGBMRegressor
 except Exception as e:
+    lightgbm = None
     LGBMRegressor = None
 
 class HurdleRegressor:
@@ -22,7 +24,10 @@ class HurdleRegressor:
             mask_va = (y_val > 0)
             X_va, y_va = X_val[mask_va], y_val[mask_va]
             fit_params["eval_set"] = [(X_va, y_va)]
-            fit_params["early_stopping_rounds"] = early_stopping_rounds
+            if early_stopping_rounds > 0:
+                callbacks = fit_params.get("callbacks", [])
+                callbacks.append(lightgbm.early_stopping(early_stopping_rounds))
+                fit_params["callbacks"] = callbacks
         self.model.fit(X_tr, y_tr, **fit_params)
 
     def predict(self, X):
