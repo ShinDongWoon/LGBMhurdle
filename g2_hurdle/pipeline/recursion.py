@@ -1,7 +1,7 @@
 
 import pandas as pd
 import numpy as np
-from ..fe import run_feature_engineering
+from ..fe import run_feature_engineering, prepare_features
 
 def _predict_one_step(df_future_row, clf, reg, threshold):
     p = clf.predict_proba(df_future_row)
@@ -9,7 +9,17 @@ def _predict_one_step(df_future_row, clf, reg, threshold):
     yhat = (p > threshold).astype(float) * np.maximum(0.0, q)
     return float(yhat[0]), float(p[0]), float(q[0])
 
-def recursive_forecast_grouped(context_df: pd.DataFrame, schema: dict, cfg: dict, clf, reg, threshold: float, horizon: int=7):
+def recursive_forecast_grouped(
+    context_df: pd.DataFrame,
+    schema: dict,
+    cfg: dict,
+    clf,
+    reg,
+    threshold: float,
+    horizon: int = 7,
+    feature_cols=None,
+    categorical_cols=None,
+):
     """Run recursive forecast per series group (identified by schema['series']).
     context_df: must contain at least the last 28 days per series.
     Returns DataFrame with columns: id, D1..Dh and optionally stacks of p,q for analysis.
@@ -40,8 +50,14 @@ def recursive_forecast_grouped(context_df: pd.DataFrame, schema: dict, cfg: dict
             ctx_ext = pd.concat([ctx, new_row], ignore_index=True)
             # Recompute features for the extended context
             fe_ctx = run_feature_engineering(ctx_ext, cfg, schema)
-            # Use the last row as the feature row
-            X_row = fe_ctx.iloc[[-1]].drop(columns=[date_col, target_col], errors="ignore")
+            drop_cols = [date_col, target_col, *series_cols, "_series_id"]
+            X_ctx, _, _ = prepare_features(
+                fe_ctx,
+                drop_cols,
+                feature_cols=feature_cols,
+                categorical_cols=categorical_cols,
+            )
+            X_row = X_ctx.iloc[[-1]]
             yhat, p, q = _predict_one_step(X_row, clf, reg, threshold)
             preds.append(yhat); probs.append(p); qtys.append(q)
             # inject prediction as if observed for next step
