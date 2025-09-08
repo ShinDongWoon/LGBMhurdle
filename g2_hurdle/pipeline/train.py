@@ -1,5 +1,5 @@
 
-import os, json
+import os
 import numpy as np
 import pandas as pd
 
@@ -12,7 +12,6 @@ from ..cv.tscv import rolling_forecast_origin_split
 from ..model.classifier import HurdleClassifier
 from ..model.regressor import HurdleRegressor
 from ..model.threshold import find_optimal_threshold
-from ..metrics.wsMAPE import calculate_wsmape
 
 logger = get_logger("Train")
 
@@ -24,6 +23,21 @@ def _split_train_valid_by_tail_dates(df, date_col, ratio_tail=28):
     val_dates = set(udates[-ratio_tail:])
     val_mask = df[date_col].isin(val_dates)
     return df[~val_mask], df[val_mask]
+
+
+def prepare_features(fe_df: pd.DataFrame, drop_cols):
+    X = fe_df.drop(columns=[c for c in drop_cols if c in fe_df.columns], errors="ignore").copy()
+    X = X.replace([np.inf, -np.inf], np.nan)
+    # drop cols all NaN or <=1 unique
+    bad = [c for c in X.columns if X[c].isna().all() or X[c].nunique(dropna=True) <= 1]
+    X = X.drop(columns=bad)
+    obj_cols = X.select_dtypes(include="object").columns
+    for c in obj_cols:
+        X[c] = X[c].astype("category")
+    X = X.fillna(0)
+    feature_cols = X.columns.tolist()
+    categorical_cols = X.select_dtypes(include="category").columns.tolist()
+    return X, feature_cols, categorical_cols
 
 def run_train(cfg: dict):
     paths = cfg.get("paths", {})
@@ -38,20 +52,8 @@ def run_train(cfg: dict):
 
     with Timer("Feature engineering"):
         fe = run_feature_engineering(df, cfg, schema)
-        # Build X, y
         drop_cols = [date_col, target_col] + series_cols + ["id"]
-
-        def _prepare_X(fe_subset: pd.DataFrame) -> pd.DataFrame:
-            X = fe_subset.drop(columns=[c for c in drop_cols if c in fe_subset.columns], errors="ignore").copy()
-            X = X.replace([np.inf, -np.inf], np.nan)
-            X = X.drop(columns=[c for c in X.columns if X[c].isna().all() or X[c].nunique() <= 1])
-            obj_cols = X.select_dtypes(include="object").columns
-            for c in obj_cols:
-                X[c] = X[c].astype("category").cat.codes
-            X = X.fillna(0)
-            return X
-
-        X_all = _prepare_X(fe)
+        X_all, feature_cols, categorical_cols = prepare_features(fe, drop_cols)
         y_all = df[target_col].values
 
     H = int(cfg.get("cv", {}).get("horizon", 7))
@@ -68,16 +70,20 @@ def run_train(cfg: dict):
             df_va = df.loc[va_mask].copy()
             # Split for early stopping inside training period
             tr_inner, va_inner = _split_train_valid_by_tail_dates(df_tr, date_col, ratio_tail=28)
-            fe_tr = fe.loc[tr_inner.index]
-            fe_va = fe.loc[va_inner.index] if va_inner is not None else None
 
-            X_tr = _prepare_X(fe_tr).values
+            X_tr = X_all.loc[tr_inner.index, feature_cols]
             y_tr = tr_inner[target_col].values
             if va_inner is not None:
-                X_val = _prepare_X(fe_va).values
+                X_val = X_all.loc[va_inner.index, feature_cols]
                 y_val = va_inner[target_col].values
             else:
                 X_val, y_val = None, None
+
+            drop_cols_tr = [c for c in X_tr.columns if X_tr[c].nunique(dropna=True) <= 1]
+            if drop_cols_tr:
+                X_tr = X_tr.drop(columns=drop_cols_tr)
+                if X_val is not None:
+                    X_val = X_val.drop(columns=drop_cols_tr, errors="ignore")
 
             cls_params = dict(cfg.get("model", {}).get("classifier", {}))
             reg_params = dict(cfg.get("model", {}).get("regressor", {}))
@@ -131,8 +137,15 @@ def run_train(cfg: dict):
         logger.info(f"Optimal threshold={t_star:.3f}, CV wSMAPE≈{score:.3f}")
 
     # Retrain on full data
+    # Repeat variance check on full dataset
+    drop_cols_full = [c for c in X_all.columns if X_all[c].nunique(dropna=True) <= 1]
+    if drop_cols_full:
+        X_all = X_all.drop(columns=drop_cols_full)
+    feature_cols = X_all.columns.tolist()
+    categorical_cols = X_all.select_dtypes(include="category").columns.tolist()
+
     with Timer("Final fit on full data"):
-        X = X_all.values
+        X = X_all.loc[:, feature_cols]
         y = y_all
         cls_params = dict(cfg.get("model", {}).get("classifier", {}))
         reg_params = dict(cfg.get("model", {}).get("regressor", {}))
@@ -151,6 +164,7 @@ def run_train(cfg: dict):
         "schema.json": schema,
         "config.json": cfg,
         "version.txt": f"generated_by=g2_hurdle; folds={folds}",
+        "features.json": {"feature_cols": feature_cols, "categorical_cols": categorical_cols},
     }
     save_artifacts(artifacts, artifacts_dir)
     logger.info("Training complete.")
