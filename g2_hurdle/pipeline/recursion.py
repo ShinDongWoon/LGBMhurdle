@@ -8,6 +8,7 @@ logger = get_logger("Recursion")
 
 
 def _predict_one_step(X, clf, reg, threshold):
+    """Predict a single step ensuring feature alignment."""
     reg_feats = len(getattr(reg, "feature_names_", []))
     clf_feats = len(getattr(clf, "feature_names_", []))
     if clf_feats != reg_feats:
@@ -16,14 +17,14 @@ def _predict_one_step(X, clf, reg, threshold):
             clf_feats,
             reg_feats,
         )
-    assert clf_feats == reg_feats, "Classifier/regressor feature count mismatch"
+        raise AssertionError("Classifier/regressor feature count mismatch")
     if X.shape[1] != reg_feats:
         logger.fatal(
             "Feature shape mismatch: X has %d columns while models expect %d",
             X.shape[1],
             reg_feats,
         )
-    assert X.shape[1] == reg_feats, "Regressor feature mismatch"
+        raise AssertionError("Regressor feature mismatch")
     p = clf.predict_proba(X)
     q = reg.predict(X)
     yhat = (p > threshold).astype(float) * np.maximum(0.0, q)

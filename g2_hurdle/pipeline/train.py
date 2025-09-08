@@ -140,11 +140,11 @@ def run_train(cfg: dict):
                         )
 
                     # Refit classifier on regressor-selected features
-                    shared_feats = list(getattr(reg, "feature_names_", []))
-                    X_tr = X_tr[shared_feats]
+                    reg_feats = list(getattr(reg, "feature_names_", []))
+                    X_tr = X_tr[reg_feats]
                     if X_val is not None:
-                        X_val = X_val[shared_feats]
-                    cat_tr = [c for c in cat_tr if c in shared_feats]
+                        X_val = X_val[reg_feats]
+                    cat_tr = [c for c in cat_tr if c in reg_feats]
                     clf = HurdleClassifier(cls_params, categorical_feature=cat_tr)
                     with Timer(f"Fit fold (train_end={tr_end.date()}) - classifier"):
                         clf.fit(X_tr, y_tr, X_val, y_val, early_stopping_rounds=esr)
@@ -164,7 +164,7 @@ def run_train(cfg: dict):
                         reg,
                         threshold=0.5,
                         horizon=H,
-                        feature_cols=shared_feats,
+                        feature_cols=reg_feats,
                         categorical_cols=cat_tr,
                     )
             if skip_fold:
@@ -247,16 +247,37 @@ def run_train(cfg: dict):
             else:
                 if min_pos_ratio > 0:
                     X, y = ensure_min_positive_ratio(X, y, min_pos_ratio, seed=seed)
-                clf_final = HurdleClassifier(cls_params, categorical_feature=categorical_cols)
+
+                # Fit regressor first on all features
                 reg_final = HurdleRegressor(reg_params, categorical_feature=categorical_cols)
-                clf_final.fit(X, y, None, None, early_stopping_rounds=0)
-                clf_final.feature_names_ = list(
-                    getattr(getattr(clf_final, "model", clf_final), "feature_name_", getattr(clf_final, "feature_names_", feature_cols))
-                )
-                reg_final.fit(X, y, None, None, early_stopping_rounds=0)
-                reg_final.feature_names_ = list(
-                    getattr(getattr(reg_final, "model", reg_final), "feature_name_", getattr(reg_final, "feature_names_", feature_cols))
-                )
+                with Timer("Final fit - regressor"):
+                    reg_final.fit(X, y, None, None, early_stopping_rounds=0)
+                    reg_final.feature_names_ = list(
+                        getattr(
+                            getattr(reg_final, "model", reg_final),
+                            "feature_name_",
+                            getattr(reg_final, "feature_names_", feature_cols),
+                        )
+                    )
+
+                # Refit classifier using regressor-selected features
+                reg_feats = list(getattr(reg_final, "feature_names_", []))
+                X = X[reg_feats]
+                cat_final = [c for c in categorical_cols if c in reg_feats]
+                clf_final = HurdleClassifier(cls_params, categorical_feature=cat_final)
+                with Timer("Final fit - classifier"):
+                    clf_final.fit(X, y, None, None, early_stopping_rounds=0)
+                    clf_final.feature_names_ = list(
+                        getattr(
+                            getattr(clf_final, "model", clf_final),
+                            "feature_name_",
+                            getattr(clf_final, "feature_names_", reg_feats),
+                        )
+                    )
+
+                # ensure categorical_cols reflects regressor-selected subset
+                categorical_cols = cat_final
+                feature_cols = reg_feats
 
     artifacts = {
         "classifier.pkl": clf_final,
