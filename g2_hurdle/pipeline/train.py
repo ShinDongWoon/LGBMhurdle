@@ -117,40 +117,45 @@ def run_train(cfg: dict):
                         X_val = X_val.drop(columns=drop_cols_tr, errors="ignore")
                 feature_cols_tr = [c for c in feature_cols if c not in drop_cols_tr]
                 categorical_cols_tr = [c for c in categorical_cols if c not in drop_cols_tr]
-                X_tr = X_tr[feature_cols_tr]
-                if X_val is not None:
-                    X_val = X_val[feature_cols_tr]
+                if not feature_cols_tr:
+                    skip_fold = True
+                    logger.warning(
+                        f"Fold (train_end={tr_end.date()}): no usable features after constant-column removal; skipping.")
+                else:
+                    X_tr = X_tr[feature_cols_tr]
+                    if X_val is not None:
+                        X_val = X_val[feature_cols_tr]
 
-                cat_tr = [c for c in categorical_cols_tr if c in X_tr.columns]
-                cls_params = dict(cfg.get("model", {}).get("classifier", {}))
-                reg_params = dict(cfg.get("model", {}).get("regressor", {}))
-                if cfg.get("runtime", {}).get("use_gpu", False):
-                    cls_params.setdefault("device_type", "gpu")
-                    reg_params.setdefault("device_type", "gpu")
-                clf = HurdleClassifier(cls_params, categorical_feature=cat_tr)
-                reg = HurdleRegressor(reg_params, categorical_feature=cat_tr)
+                    cat_tr = [c for c in categorical_cols_tr if c in X_tr.columns]
+                    cls_params = dict(cfg.get("model", {}).get("classifier", {}))
+                    reg_params = dict(cfg.get("model", {}).get("regressor", {}))
+                    if cfg.get("runtime", {}).get("use_gpu", False):
+                        cls_params.setdefault("device_type", "gpu")
+                        reg_params.setdefault("device_type", "gpu")
+                    clf = HurdleClassifier(cls_params, categorical_feature=cat_tr)
+                    reg = HurdleRegressor(reg_params, categorical_feature=cat_tr)
 
-                with Timer(f"Fit fold (train_end={tr_end.date()}) - classifier"):
-                    clf.fit(X_tr, y_tr, X_val, y_val, early_stopping_rounds=esr)
-                with Timer(f"Fit fold (train_end={tr_end.date()}) - regressor"):
-                    reg.fit(X_tr, y_tr, X_val, y_val, early_stopping_rounds=esr)
+                    with Timer(f"Fit fold (train_end={tr_end.date()}) - classifier"):
+                        clf.fit(X_tr, y_tr, X_val, y_val, early_stopping_rounds=esr)
+                    with Timer(f"Fit fold (train_end={tr_end.date()}) - regressor"):
+                        reg.fit(X_tr, y_tr, X_val, y_val, early_stopping_rounds=esr)
 
-                # Recursive simulate on validation horizon per id
-                from .recursion import recursive_forecast_grouped
-                # Use context: all rows up to tr_end per series
-                context = df[df[date_col] <= tr_end].copy()
-                preds_df = recursive_forecast_grouped(
-                    context,
-                    schema,
-                    cfg,
-                    clf,
-                    reg,
-                    threshold=0.5,
-                    horizon=H,
-                    feature_cols=feature_cols_tr,
-                    categorical_cols=categorical_cols_tr,
-                )
-            else:
+                    # Recursive simulate on validation horizon per id
+                    from .recursion import recursive_forecast_grouped
+                    # Use context: all rows up to tr_end per series
+                    context = df[df[date_col] <= tr_end].copy()
+                    preds_df = recursive_forecast_grouped(
+                        context,
+                        schema,
+                        cfg,
+                        clf,
+                        reg,
+                        threshold=0.5,
+                        horizon=H,
+                        feature_cols=feature_cols_tr,
+                        categorical_cols=categorical_cols_tr,
+                    )
+            if skip_fold:
                 ids = df_va["id"].unique()
                 preds_df = pd.DataFrame({"id": ids})
                 for i in range(1, H + 1):
@@ -199,35 +204,39 @@ def run_train(cfg: dict):
         X_all = X_all.drop(columns=drop_cols_full)
     feature_cols = X_all.columns.tolist()
     categorical_cols = X_all.select_dtypes(include="category").columns.tolist()
-
-    with Timer("Final fit on full data"):
-        X = X_all.loc[:, feature_cols]
-        y = y_all
-        cls_params = dict(cfg.get("model", {}).get("classifier", {}))
-        reg_params = dict(cfg.get("model", {}).get("regressor", {}))
-        if cfg.get("runtime", {}).get("use_gpu", False):
-            cls_params.setdefault("device_type", "gpu")
-            reg_params.setdefault("device_type", "gpu")
-        min_pos_samples = int(cfg.get("cv", {}).get("min_positive_samples", 0))
-        min_neg_samples = int(cfg.get("cv", {}).get("min_negative_samples", 0))
-        y_bin_full = (y > 0)
-        unique_full = np.unique(y_bin_full)
-        pos_count_full = int(y_bin_full.sum())
-        neg_count_full = int(len(y_bin_full) - pos_count_full)
-        if len(unique_full) < 2:
-            logger.warning("Full data has a single class; using ZeroPredictor.")
-            clf_final = ZeroPredictor()
-            reg_final = ZeroPredictor()
-        elif pos_count_full < min_pos_samples or neg_count_full < min_neg_samples:
-            logger.warning(
-                f"Full data has only {pos_count_full} positive or {neg_count_full} negative samples; using ZeroPredictor.")
-            clf_final = ZeroPredictor()
-            reg_final = ZeroPredictor()
-        else:
-            clf_final = HurdleClassifier(cls_params, categorical_feature=categorical_cols)
-            reg_final = HurdleRegressor(reg_params, categorical_feature=categorical_cols)
-            clf_final.fit(X, y, None, None, early_stopping_rounds=0)
-            reg_final.fit(X, y, None, None, early_stopping_rounds=0)
+    if X_all.shape[1] == 0:
+        logger.warning("Full data has no usable features after constant-column removal; using ZeroPredictor.")
+        clf_final = ZeroPredictor()
+        reg_final = ZeroPredictor()
+    else:
+        with Timer("Final fit on full data"):
+            X = X_all.loc[:, feature_cols]
+            y = y_all
+            cls_params = dict(cfg.get("model", {}).get("classifier", {}))
+            reg_params = dict(cfg.get("model", {}).get("regressor", {}))
+            if cfg.get("runtime", {}).get("use_gpu", False):
+                cls_params.setdefault("device_type", "gpu")
+                reg_params.setdefault("device_type", "gpu")
+            min_pos_samples = int(cfg.get("cv", {}).get("min_positive_samples", 0))
+            min_neg_samples = int(cfg.get("cv", {}).get("min_negative_samples", 0))
+            y_bin_full = (y > 0)
+            unique_full = np.unique(y_bin_full)
+            pos_count_full = int(y_bin_full.sum())
+            neg_count_full = int(len(y_bin_full) - pos_count_full)
+            if len(unique_full) < 2:
+                logger.warning("Full data has a single class; using ZeroPredictor.")
+                clf_final = ZeroPredictor()
+                reg_final = ZeroPredictor()
+            elif pos_count_full < min_pos_samples or neg_count_full < min_neg_samples:
+                logger.warning(
+                    f"Full data has only {pos_count_full} positive or {neg_count_full} negative samples; using ZeroPredictor.")
+                clf_final = ZeroPredictor()
+                reg_final = ZeroPredictor()
+            else:
+                clf_final = HurdleClassifier(cls_params, categorical_feature=categorical_cols)
+                reg_final = HurdleRegressor(reg_params, categorical_feature=categorical_cols)
+                clf_final.fit(X, y, None, None, early_stopping_rounds=0)
+                reg_final.fit(X, y, None, None, early_stopping_rounds=0)
 
     artifacts = {
         "classifier.pkl": clf_final,
