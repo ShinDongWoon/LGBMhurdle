@@ -1,7 +1,12 @@
 
 import pandas as pd
 import numpy as np
-from ..fe import run_feature_engineering, prepare_features
+from ..fe import (
+    prepare_features,
+    create_lags_and_rolling_features,
+    create_intermittency_features,
+)
+from ..fe.static import prepare_static_future_features
 from ..utils.logging import get_logger
 
 logger = get_logger("Recursion")
@@ -63,22 +68,31 @@ def recursive_forecast_grouped(
         ctx = g.copy()
         preds, probs, qtys = [], [], []
         last_date = ctx[date_col].max()
+        static_feats = prepare_static_future_features(ctx, schema, cfg, H)
         for h in range(1, H+1):
             future_date = last_date + pd.Timedelta(days=h)
             new_row = ctx.iloc[-1:].copy()
             new_row[date_col] = future_date
             new_row[target_col] = np.nan
             ctx_ext = pd.concat([ctx, new_row], ignore_index=True)
-            # Recompute features for the extended context
-            fe_ctx = run_feature_engineering(ctx_ext, cfg, schema)
+            # Dynamic features only
+            fe_ctx = create_lags_and_rolling_features(
+                ctx_ext, target_col, series_cols, cfg
+            )
+            if cfg.get("features", {}).get("intermittency", {}).get("enable", True):
+                fe_ctx = create_intermittency_features(
+                    fe_ctx, target_col, series_cols
+                )
+            dyn_row = fe_ctx.iloc[[-1]].reset_index(drop=True)
+            stat_row = static_feats.loc[[future_date]].reset_index(drop=True)
+            fe_row = pd.concat([dyn_row, stat_row], axis=1)
             drop_cols = [date_col, target_col, *series_cols, "_series_id"]
-            X_ctx, _, _ = prepare_features(
-                fe_ctx,
+            X_row, _, _ = prepare_features(
+                fe_row,
                 drop_cols,
                 feature_cols=feature_cols,
                 categorical_cols=categorical_cols,
             )
-            X_row = X_ctx.iloc[[-1]]
             yhat, p, q = _predict_one_step(X_row, clf, reg, threshold)
             preds.append(yhat); probs.append(p); qtys.append(q)
             # inject prediction as if observed for next step
