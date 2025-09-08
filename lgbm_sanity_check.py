@@ -51,12 +51,17 @@ def add_group_lags(df, key_col, target_col, lags=(1,7,14,28)):
     for L in lags:
         df[f"lag_{L}"] = df.groupby(key_col)[target_col].shift(L)
     # 이동평균/합
-    df["ma7"]  = df.groupby(key_col)[target_col].shift(1).rolling(7).mean()
-    df["sum7"] = df.groupby(key_col)[target_col].shift(1).rolling(7).sum()
+    df["ma7"]  = df.groupby(key_col)[target_col].shift(1).rolling(7, min_periods=1).mean()
+    df["sum7"] = df.groupby(key_col)[target_col].shift(1).rolling(7, min_periods=1).sum()
     # zero-run 길이
     # (이전 상태에서 0이 연속으로 몇 번 나왔는지)
-    z = (df[target_col]==0).astype(int)
-    df["zero_run"] = z.groupby(df[key_col]).apply(lambda s: s.groupby((s!=s.shift()).cumsum()).cumcount()+1).where(z==1, 0).values
+    z = (df[target_col] == 0).astype(int)
+    zero_run = z.groupby(df[key_col]).apply(
+        lambda s: s.groupby((s != s.shift()).cumsum()).cumcount() + 1
+    )
+    zero_run.index = z.index
+    df["zero_run"] = zero_run.where(z == 1, 0).values
+    df.fillna(0, inplace=True)
     return df
 
 def build_dataset(args):
