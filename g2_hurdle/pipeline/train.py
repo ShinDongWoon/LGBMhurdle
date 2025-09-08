@@ -135,8 +135,24 @@ def run_train(cfg: dict):
 
                     with Timer(f"Fit fold (train_end={tr_end.date()}) - classifier"):
                         clf.fit(X_tr, y_tr, X_val, y_val, early_stopping_rounds=esr)
+                        # store fitted feature names for later intersection
+                        clf.feature_names_ = list(
+                            getattr(getattr(clf, "model", clf), "feature_name_", getattr(clf, "feature_names_", []))
+                        )
                     with Timer(f"Fit fold (train_end={tr_end.date()}) - regressor"):
                         reg.fit(X_tr, y_tr, X_val, y_val, early_stopping_rounds=esr)
+                        reg.feature_names_ = list(
+                            getattr(getattr(reg, "model", reg), "feature_name_", getattr(reg, "feature_names_", []))
+                        )
+
+                    # Compute shared feature names between classifier and regressor
+                    clf_feats = getattr(clf, "feature_names_", [])
+                    reg_feats = getattr(reg, "feature_names_", [])
+                    shared_feats = [f for f in clf_feats if f in reg_feats]
+                    if len(clf_feats) != len(reg_feats):
+                        logger.warning(
+                            f"Fold (train_end={tr_end.date()}): classifier features={len(clf_feats)} vs regressor features={len(reg_feats)}; using intersection {len(shared_feats)}."
+                        )
 
                     # Recursive simulate on validation horizon per id
                     from .recursion import recursive_forecast_grouped
@@ -150,7 +166,7 @@ def run_train(cfg: dict):
                         reg,
                         threshold=0.5,
                         horizon=H,
-                        feature_cols=reg.feature_names_,
+                        feature_cols=shared_feats,
                         categorical_cols=categorical_cols_tr,
                     )
             if skip_fold:
@@ -236,7 +252,13 @@ def run_train(cfg: dict):
                 clf_final = HurdleClassifier(cls_params, categorical_feature=categorical_cols)
                 reg_final = HurdleRegressor(reg_params, categorical_feature=categorical_cols)
                 clf_final.fit(X, y, None, None, early_stopping_rounds=0)
+                clf_final.feature_names_ = list(
+                    getattr(getattr(clf_final, "model", clf_final), "feature_name_", getattr(clf_final, "feature_names_", feature_cols))
+                )
                 reg_final.fit(X, y, None, None, early_stopping_rounds=0)
+                reg_final.feature_names_ = list(
+                    getattr(getattr(reg_final, "model", reg_final), "feature_name_", getattr(reg_final, "feature_names_", feature_cols))
+                )
 
     artifacts = {
         "classifier.pkl": clf_final,
