@@ -16,8 +16,8 @@ from ..utils.logging import get_logger
 logger = get_logger("Recursion")
 
 
-def _predict_one_step(X, clf, reg, threshold):
-    """Predict a single step ensuring feature alignment."""
+def _predict_batch(X: np.ndarray, clf, reg, threshold: float):
+    """Predict in batch ensuring feature alignment."""
     reg_feats = len(getattr(reg, "feature_names_", []))
     clf_feats = len(getattr(clf, "feature_names_", []))
     if clf_feats != reg_feats:
@@ -34,10 +34,10 @@ def _predict_one_step(X, clf, reg, threshold):
             reg_feats,
         )
         raise AssertionError("Regressor feature mismatch")
-    p = clf.predict_proba(X)
-    q = reg.predict(X)
-    yhat = (p > threshold).astype(float) * np.maximum(0.0, q)
-    return float(yhat[0]), float(p[0]), float(q[0])
+    p = clf.predict_proba(X).astype(np.float32, copy=False)
+    q = reg.predict(X).astype(np.float32, copy=False)
+    yhat = (p > threshold).astype(np.float32) * np.maximum(np.float32(0.0), q)
+    return yhat, p, q
 
 def recursive_forecast_grouped(
     context_df: pd.DataFrame,
@@ -65,10 +65,10 @@ def recursive_forecast_grouped(
     context_df = context_df.copy()
     context_df["_series_id"] = id_series
 
-    out_rows = []
+    drop_cols = [date_col, target_col, *series_cols]
+    series_data = {}
     for sid, g in context_df.groupby("_series_id"):
         g = g.sort_values(date_col).copy()
-        preds, probs, qtys = [], [], []
         last_date = g[date_col].max()
         static_feats = prepare_static_future_features(g, schema, cfg, H)
 
@@ -86,32 +86,55 @@ def recursive_forecast_grouped(
         if cfg.get("features", {}).get("intermittency", {}).get("enable", True):
             ctx = update_intermittency_features(ctx, last_y)
 
-        for h in range(1, H + 1):
-            future_date = last_date + pd.Timedelta(days=h)
+        series_data[sid] = {
+            "ctx": ctx,
+            "static": static_feats,
+            "last_date": last_date,
+            "preds": [],
+            "probs": [],
+            "qtys": [],
+        }
 
-            dyn_row = ctx.iloc[[-1]].copy()
+    series_ids = list(series_data.keys())
+
+    for h in range(1, H + 1):
+        fe_rows = []
+        sid_order = []
+        for sid in series_ids:
+            info = series_data[sid]
+            future_date = info["last_date"] + pd.Timedelta(days=h)
+            dyn_row = info["ctx"].iloc[[-1]].copy()
             dyn_row[date_col] = future_date
-            stat_row = static_feats.loc[[future_date]].reset_index(drop=True)
-            fe_row = pd.concat([dyn_row.reset_index(drop=True), stat_row], axis=1)
-            drop_cols = [date_col, target_col, *series_cols]
-            X_row, _, _ = prepare_features(
-                fe_row,
-                drop_cols,
-                feature_cols=feature_cols,
-                categorical_cols=categorical_cols,
+            stat_row = info["static"].loc[[future_date]].reset_index(drop=True)
+            fe_rows.append(
+                pd.concat([dyn_row.reset_index(drop=True), stat_row], axis=1)
             )
-            yhat, p, q = _predict_one_step(X_row, clf, reg, threshold)
-            preds.append(yhat)
-            probs.append(p)
-            qtys.append(q)
+            sid_order.append(sid)
 
-            ctx = update_lags_and_rollings(ctx, yhat, cfg)
+        fe_df = pd.concat(fe_rows, axis=0, ignore_index=True)
+        X_batch_df, _, _ = prepare_features(
+            fe_df,
+            drop_cols,
+            feature_cols=feature_cols,
+            categorical_cols=categorical_cols,
+        )
+        X_batch = X_batch_df.to_numpy(dtype=np.float32, copy=False)
+        yhat_batch, p_batch, q_batch = _predict_batch(X_batch, clf, reg, threshold)
+
+        for sid, yhat, p, q in zip(sid_order, yhat_batch, p_batch, q_batch):
+            info = series_data[sid]
+            info["preds"].append(np.float32(yhat))
+            info["probs"].append(np.float32(p))
+            info["qtys"].append(np.float32(q))
+            info["ctx"] = update_lags_and_rollings(info["ctx"], float(yhat), cfg)
             if cfg.get("features", {}).get("intermittency", {}).get("enable", True):
-                ctx = update_intermittency_features(ctx, yhat)
+                info["ctx"] = update_intermittency_features(info["ctx"], float(yhat))
 
+    out_rows = []
+    for sid, info in series_data.items():
         row = {"id": sid}
-        for i, v in enumerate(preds, start=1):
-            row[f"D{i}"] = v
+        for i, v in enumerate(info["preds"], start=1):
+            row[f"D{i}"] = float(v)
         out_rows.append(row)
     out = pd.DataFrame(out_rows)
     # Ensure D1..Dh exist
