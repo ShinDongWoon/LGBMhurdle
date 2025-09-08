@@ -10,10 +10,10 @@ def _predict_one_step(df_future_row, clf, reg, threshold):
     return float(yhat[0]), float(p[0]), float(q[0])
 
 def recursive_forecast_grouped(context_df: pd.DataFrame, schema: dict, cfg: dict, clf, reg, threshold: float, horizon: int=7):
-    \"\"\"Run recursive forecast per series group (identified by schema['series']).
+    """Run recursive forecast per series group (identified by schema['series']).
     context_df: must contain at least the last 28 days per series.
     Returns DataFrame with columns: id, D1..Dh and optionally stacks of p,q for analysis.
-    \"\"\"
+    """
     date_col = schema["date"]
     target_col = schema["target"]
     series_cols = schema["series"]
