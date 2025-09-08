@@ -128,8 +128,15 @@ def run_train(cfg: dict):
                     cls_params = dict(cfg.get("model", {}).get("classifier", {}))
                     reg_params = dict(cfg.get("model", {}).get("regressor", {}))
                     if cfg.get("runtime", {}).get("use_gpu", False):
+                        # Ensure GPU-specific defaults are present; adjust max_bin or num_leaves if OOM occurs
                         cls_params.setdefault("device_type", "gpu")
                         reg_params.setdefault("device_type", "gpu")
+                        cls_params.setdefault("gpu_use_dp", False)
+                        reg_params.setdefault("gpu_use_dp", False)
+                        cls_params.setdefault("max_bin", 255)
+                        reg_params.setdefault("max_bin", 255)
+                        cls_params.setdefault("feature_fraction", 0.8)
+                        reg_params.setdefault("feature_fraction", 0.8)
                     reg = HurdleRegressor(reg_params, categorical_feature=cat_tr)
 
                     # Fit regressor first
@@ -227,8 +234,15 @@ def run_train(cfg: dict):
             cls_params = dict(cfg.get("model", {}).get("classifier", {}))
             reg_params = dict(cfg.get("model", {}).get("regressor", {}))
             if cfg.get("runtime", {}).get("use_gpu", False):
+                # Ensure GPU defaults are applied; lower max_bin or num_leaves if memory is tight
                 cls_params.setdefault("device_type", "gpu")
                 reg_params.setdefault("device_type", "gpu")
+                cls_params.setdefault("gpu_use_dp", False)
+                reg_params.setdefault("gpu_use_dp", False)
+                cls_params.setdefault("max_bin", 255)
+                reg_params.setdefault("max_bin", 255)
+                cls_params.setdefault("feature_fraction", 0.8)
+                reg_params.setdefault("feature_fraction", 0.8)
             min_pos_samples = int(cfg.get("cv", {}).get("min_positive_samples", 0))
             min_neg_samples = int(cfg.get("cv", {}).get("min_negative_samples", 0))
             y_bin_full = (y > 0)
