@@ -29,6 +29,13 @@ By default, both scripts load the configuration from `g2_hurdle/configs/korean.y
 `predict.py` consumes the artifacts, expects test files in `data/test` with a
 `data/sample_submission.csv`, and writes predictions to `outputs/submission.csv`.
 
+## GPU configuration
+
+To enable GPU acceleration, set `runtime.use_gpu` to `true` in the YAML
+configuration. The pipeline will automatically set `device_type: gpu` for the
+LightGBM models. The older `device` parameter is deprecated and should not be
+used.
+
 ## Dependencies
 
 Run `python dependency.py` to install dependencies.
