@@ -1,48 +1,59 @@
 import numpy as np
 import pandas as pd
+from typing import Tuple
 
 
-def ensure_min_positive_ratio(df: pd.DataFrame, target_col: str, min_ratio: float, seed: int = 42) -> pd.DataFrame:
-    """Ensure that the fraction of rows with positive target values is at least `min_ratio`.
+def ensure_min_positive_ratio(
+    X: pd.DataFrame, y: np.ndarray, min_ratio: float, seed: int = 42
+) -> Tuple[pd.DataFrame, np.ndarray]:
+    """Ensure that the fraction of positive targets is at least ``min_ratio``.
 
-    If the current positive ratio is below the desired threshold, positive rows
-    are resampled with replacement until the ratio is satisfied.
+    This function operates on a feature matrix ``X`` and corresponding target
+    vector ``y``.  If the proportion of positive targets (``y > 0``) is below
+    the requested ratio, positive samples are resampled with replacement until
+    the ratio is satisfied.  Both ``X`` and ``y`` are returned with the
+    additional rows appended.
 
     Parameters
     ----------
-    df : pd.DataFrame
-        Input dataframe containing the target column.
-    target_col : str
-        Name of the target column.
+    X : pd.DataFrame
+        Feature matrix.
+    y : np.ndarray
+        Target values aligned with ``X``.
     min_ratio : float
-        Minimum required ratio of positive target samples (0-1 range).
+        Desired minimum ratio of positive targets (0-1 range).
     seed : int, optional
-        Random seed for sampling, by default 42.
+        Random seed for sampling, by default ``42``.
 
     Returns
     -------
-    pd.DataFrame
-        Dataframe augmented with additional positive samples if needed.
+    Tuple[pd.DataFrame, np.ndarray]
+        Augmented ``X`` and ``y`` with additional positive samples if needed.
     """
     if min_ratio <= 0:
-        return df
+        return X, y
 
-    total = len(df)
+    total = len(y)
     if total == 0:
-        return df
+        return X, y
 
-    pos_mask = df[target_col] > 0
+    pos_mask = y > 0
     pos_count = int(pos_mask.sum())
     if pos_count == 0:
-        return df
+        return X, y
 
     current_ratio = pos_count / total
     if current_ratio >= min_ratio:
-        return df
+        return X, y
 
     required_pos = int(np.ceil(min_ratio * total))
     additional = required_pos - pos_count
-    pos_df = df.loc[pos_mask]
-    extra = pos_df.sample(n=additional, replace=True, random_state=seed)
-    df_aug = pd.concat([df, extra], ignore_index=True)
-    return df_aug
+    rng = np.random.default_rng(seed)
+    pos_indices = np.flatnonzero(pos_mask)
+    extra_indices = rng.choice(pos_indices, size=additional, replace=True)
+
+    X_extra = X.iloc[extra_indices].copy()
+    y_extra = y[extra_indices]
+    X_aug = pd.concat([X, X_extra], ignore_index=True)
+    y_aug = np.concatenate([y, y_extra])
+    return X_aug, y_aug
