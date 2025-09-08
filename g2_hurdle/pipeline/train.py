@@ -64,6 +64,9 @@ def run_train(cfg: dict):
         fe = run_feature_engineering(df, cfg, schema)
         drop_cols = [date_col, target_col] + series_cols + ["id"]
         X_all, feature_cols, categorical_cols = prepare_features(fe, drop_cols)
+        # ensure calendar components are treated as categorical features
+        base_cats = [c for c in ["dow", "week", "month", "quarter"] if c in X_all.columns]
+        categorical_cols = sorted(set(categorical_cols).union(base_cats))
         y_all = df[target_col].values
 
     H = int(cfg.get("cv", {}).get("horizon", 7))
