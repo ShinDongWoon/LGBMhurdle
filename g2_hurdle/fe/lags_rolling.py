@@ -8,7 +8,7 @@ def create_lags_and_rolling_features(df: pd.DataFrame, target_col: str, series_c
     rolls = cfg.get("features", {}).get("rollings", [7,14,28])
 
     if series_cols:
-        g = out.groupby(series_cols, group_keys=False)
+        g = out.groupby(series_cols, group_keys=False, observed=False)
     else:
         # treat whole df as one group
         g = [(None, out)]
@@ -34,7 +34,7 @@ def create_lags_and_rolling_features(df: pd.DataFrame, target_col: str, series_c
         return group
 
     if series_cols:
-        out = out.groupby(series_cols, group_keys=False).apply(_apply)
+        out = out.groupby(series_cols, group_keys=False, observed=False).apply(_apply)
     else:
         out = _apply(out)
 

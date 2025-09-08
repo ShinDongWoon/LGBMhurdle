@@ -31,7 +31,7 @@ def create_intermittency_features(df: pd.DataFrame, target_col: str, series_cols
         return group
 
     if series_cols:
-        out = out.groupby(series_cols, group_keys=False).apply(_apply)
+        out = out.groupby(series_cols, group_keys=False, observed=False).apply(_apply)
     else:
         out = _apply(out)
     return out
