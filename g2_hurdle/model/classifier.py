@@ -1,6 +1,7 @@
 
 from typing import Optional, Sequence
 import numpy as np
+import warnings
 
 try:
     import lightgbm
@@ -18,17 +19,27 @@ class HurdleClassifier:
 
     def fit(self, X_train, y_train, X_val=None, y_val=None, early_stopping_rounds=100):
         y_train_bin = (y_train > 0).astype(int)
+        unique_classes = np.unique(y_train_bin)
+        if len(unique_classes) < 2:
+            raise ValueError("Training data contains only one class.")
+
         fit_params = {
             "categorical_feature": self.categorical_feature,
         }
         if hasattr(X_train, "columns"):
             fit_params["feature_name"] = list(X_train.columns)
+
         if X_val is not None and y_val is not None:
-            fit_params["eval_set"] = [(X_val, (y_val > 0).astype(int))]
-            if early_stopping_rounds > 0:
-                callbacks = fit_params.get("callbacks", [])
-                callbacks.append(lightgbm.early_stopping(early_stopping_rounds))
-                fit_params["callbacks"] = callbacks
+            y_val_bin = (y_val > 0).astype(int)
+            if np.unique(y_val_bin).size < 2:
+                warnings.warn("Validation data contains only one class. eval_set will be ignored.")
+            else:
+                fit_params["eval_set"] = [(X_val, y_val_bin)]
+                if early_stopping_rounds > 0:
+                    callbacks = fit_params.get("callbacks", [])
+                    callbacks.append(lightgbm.early_stopping(early_stopping_rounds))
+                    fit_params["callbacks"] = callbacks
+
         self.model.fit(X_train, y_train_bin, **fit_params)
 
     def predict_proba(self, X):
