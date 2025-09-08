@@ -19,7 +19,11 @@ class HurdleRegressor:
     def fit(self, X_train, y_train, X_val=None, y_val=None, early_stopping_rounds=100):
         mask_tr = (y_train > 0)
         X_tr, y_tr = X_train[mask_tr], y_train[mask_tr]
-        fit_params = {}
+        fit_params = {
+            "categorical_feature": self.categorical_feature,
+        }
+        if hasattr(X_train, "columns"):
+            fit_params["feature_name"] = list(X_train.columns)
         if X_val is not None and y_val is not None:
             mask_va = (y_val > 0)
             X_va, y_va = X_val[mask_va], y_val[mask_va]
