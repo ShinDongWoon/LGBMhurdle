@@ -14,6 +14,11 @@ python -m g2_hurdle.cli predict \
 ```
 All imports are relative; drop this folder as project root and run the commands.
 
+## Dependencies
+
+Run `python dependency.py` to install dependencies.
+
+
 ## Data configuration
 
 Columns used by the toolkit can be provided directly in the `data` section of the
