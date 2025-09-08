@@ -13,6 +13,7 @@ data:
   target_col_candidates: ["sales","y","target"]
   id_col_candidates: ["store_id","menu_id","series_id","영업장명","메뉴명"]
   min_context_days: 28
+  min_positive_ratio: 0.01
 
 features:
   fourier: { weekly_K: 3, yearly_K: 10 }
@@ -51,6 +52,7 @@ cv:
   early_stopping_rounds: 100
   n_folds_min: 2
   time_series_split: "rolling_origin"
+  min_positive_samples: 10
 
 threshold:
   grid_start: 0.01
