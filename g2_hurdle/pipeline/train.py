@@ -39,8 +39,16 @@ def run_train(cfg: dict):
     with Timer("Feature engineering"):
         fe = run_feature_engineering(df, cfg, schema)
         # Build X, y
-        drop_cols = [date_col, target_col]
-        X_all = fe.drop(columns=[c for c in drop_cols if c in fe.columns], errors="ignore")
+        drop_cols = [date_col, target_col] + series_cols + ["id"]
+
+        def _prepare_X(fe_subset: pd.DataFrame) -> pd.DataFrame:
+            X = fe_subset.drop(columns=[c for c in drop_cols if c in fe_subset.columns], errors="ignore").copy()
+            obj_cols = X.select_dtypes(include="object").columns
+            for c in obj_cols:
+                X[c] = X[c].astype("category").cat.codes
+            return X
+
+        X_all = _prepare_X(fe)
         y_all = df[target_col].values
 
     H = int(cfg.get("cv", {}).get("horizon", 7))
@@ -60,10 +68,10 @@ def run_train(cfg: dict):
             fe_tr = fe.loc[tr_inner.index]
             fe_va = fe.loc[va_inner.index] if va_inner is not None else None
 
-            X_tr = fe_tr.drop(columns=[c for c in [date_col, target_col] if c in fe_tr.columns], errors="ignore").values
+            X_tr = _prepare_X(fe_tr).values
             y_tr = tr_inner[target_col].values
             if va_inner is not None:
-                X_val = fe_va.drop(columns=[c for c in [date_col, target_col] if c in fe_va.columns], errors="ignore").values
+                X_val = _prepare_X(fe_va).values
                 y_val = va_inner[target_col].values
             else:
                 X_val, y_val = None, None
