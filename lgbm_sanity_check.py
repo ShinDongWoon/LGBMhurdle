@@ -22,7 +22,7 @@ def parse_args():
     ap.add_argument("--target_col", type=str, default="매출수량")
     ap.add_argument("--nrows", type=int, default=None, help="디버깅을 위해 일부만 읽고 싶다면 지정")
     ap.add_argument("--valid_days", type=int, default=28, help="검증 기간(일)")
-    ap.add_argument("--min_data_in_leaf", type=int, default=30)
+    ap.add_argument("--min_child_samples", type=int, default=30)
     ap.add_argument("--min_sum_hessian_in_leaf", type=float, default=1e-3)
     ap.add_argument("--max_bin", type=int, default=1023)
     ap.add_argument("--seed", type=int, default=42)
@@ -134,7 +134,7 @@ def train_lgbm(args, X, y, trn_idx, val_idx):
         n_estimators=3000,
         num_leaves=127,
         max_bin=args.max_bin,
-        min_data_in_leaf=args.min_data_in_leaf,
+        min_child_samples=args.min_child_samples,
         min_sum_hessian_in_leaf=args.min_sum_hessian_in_leaf,
         feature_pre_filter=False,
         min_data_in_bin=1,
@@ -142,7 +142,7 @@ def train_lgbm(args, X, y, trn_idx, val_idx):
         bagging_freq=1,
         feature_fraction=0.9,
         seed=args.seed,
-        verbose=1,
+        verbose=-1,
         zero_as_missing=False,
         force_col_wise=True,   # 안전
     )
