@@ -7,7 +7,7 @@ from ..utils.logging import get_logger
 from ..utils.timer import Timer
 from ..utils.io import load_data, save_artifacts
 from ..utils.keys import build_series_id
-from ..fe import run_feature_engineering
+from ..fe import run_feature_engineering, prepare_features
 from ..cv.tscv import rolling_forecast_origin_split
 from ..model.classifier import HurdleClassifier
 from ..model.regressor import HurdleRegressor
@@ -23,21 +23,6 @@ def _split_train_valid_by_tail_dates(df, date_col, ratio_tail=28):
     val_dates = set(udates[-ratio_tail:])
     val_mask = df[date_col].isin(val_dates)
     return df[~val_mask], df[val_mask]
-
-
-def prepare_features(fe_df: pd.DataFrame, drop_cols):
-    X = fe_df.drop(columns=[c for c in drop_cols if c in fe_df.columns], errors="ignore").copy()
-    X = X.replace([np.inf, -np.inf], np.nan)
-    # drop cols all NaN or <=1 unique
-    bad = [c for c in X.columns if X[c].isna().all() or X[c].nunique(dropna=True) <= 1]
-    X = X.drop(columns=bad)
-    obj_cols = X.select_dtypes(include="object").columns
-    for c in obj_cols:
-        X[c] = X[c].astype("category")
-    X = X.fillna(0)
-    feature_cols = X.columns.tolist()
-    categorical_cols = X.select_dtypes(include="category").columns.tolist()
-    return X, feature_cols, categorical_cols
 
 def run_train(cfg: dict):
     paths = cfg.get("paths", {})
@@ -103,7 +88,17 @@ def run_train(cfg: dict):
             from .recursion import recursive_forecast_grouped
             # Use context: all rows up to tr_end per series
             context = df[df[date_col] <= tr_end].copy()
-            preds_df = recursive_forecast_grouped(context, schema, cfg, clf, reg, threshold=0.5, horizon=H)
+            preds_df = recursive_forecast_grouped(
+                context,
+                schema,
+                cfg,
+                clf,
+                reg,
+                threshold=0.5,
+                horizon=H,
+                feature_cols=feature_cols,
+                categorical_cols=categorical_cols,
+            )
             # For threshold tuning we need y_true for validation horizon
             # Construct ground truth for va period in wide form
             va_truth = df_va.copy()

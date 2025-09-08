@@ -7,7 +7,7 @@ from ..utils.logging import get_logger
 from ..utils.timer import Timer
 from ..utils.io import load_artifacts, load_data
 from ..utils.keys import build_series_id, align_to_submission, ensure_wide_columns
-from ..fe import run_feature_engineering
+from ..fe import run_feature_engineering, prepare_features
 from .recursion import recursive_forecast_grouped
 
 logger = get_logger("Predict")
@@ -25,6 +25,9 @@ def run_predict(cfg: dict):
         reg = art.get("regressor.pkl")
         thresh = float(art.get("threshold.json", {}).get("threshold", 0.5))
         schema = art.get("schema.json", None) or {}
+        features_meta = art.get("features.json", {})
+        feature_cols = features_meta.get("feature_cols", [])
+        categorical_cols = features_meta.get("categorical_cols", [])
 
     H = int(cfg.get("cv", {}).get("horizon", 7))
 
@@ -34,7 +37,10 @@ def run_predict(cfg: dict):
     if not test_files:
         raise FileNotFoundError("No TEST_*.csv files found")
     for f in test_files:
-        df, _schema = load_data(f, {"data": {"date_col_candidates": [schema.get("date")], "target_col_candidates": [schema.get("target")], "id_col_candidates": schema.get("series", [])}} if schema else cfg)
+        df, _schema = load_data(
+            f,
+            {"data": {"date_col_candidates": [schema.get("date")], "target_col_candidates": [schema.get("target")], "id_col_candidates": schema.get("series", [])}} if schema else cfg,
+        )
         # ensure id
         df["id"] = build_series_id(df, (schema or _schema)["series"])
         # context length check
@@ -44,7 +50,28 @@ def run_predict(cfg: dict):
         if bad:
             raise ValueError(f"{os.path.basename(f)}: some series have < {min_ctx} days: {bad[:5]} ...")
 
-        preds_df = recursive_forecast_grouped(df, schema or _schema, cfg, clf, reg, threshold=thresh, horizon=H)
+        # Optionally compute features to ensure column alignment
+        schema_use = schema or _schema
+        fe = run_feature_engineering(df, cfg, schema_use)
+        drop_cols = [
+            schema_use["date"],
+            schema_use["target"],
+            *schema_use["series"],
+            "id",
+        ]
+        prepare_features(fe, drop_cols, feature_cols, categorical_cols)
+
+        preds_df = recursive_forecast_grouped(
+            df,
+            schema_use,
+            cfg,
+            clf,
+            reg,
+            threshold=thresh,
+            horizon=H,
+            feature_cols=feature_cols,
+            categorical_cols=categorical_cols,
+        )
         pred_all.append(preds_df)
 
     preds = pd.concat(pred_all, ignore_index=True)
