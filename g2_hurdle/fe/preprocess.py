@@ -5,9 +5,21 @@ import pandas as pd
 def prepare_features(fe_df: pd.DataFrame, drop_cols, feature_cols=None, categorical_cols=None):
     X = fe_df.drop(columns=[c for c in drop_cols if c in fe_df.columns], errors="ignore").copy()
     X = X.replace([np.inf, -np.inf], np.nan)
-    # Fill missing values before converting strings to categorical to avoid
-    # introducing new categories during `fillna` on categorical columns.
-    X = X.fillna(0)
+    # Handle missing values separately for categorical and non-categorical columns
+    cat_cols = X.select_dtypes(include="category").columns
+    obj_cols = X.select_dtypes(include="object").columns
+    non_cat_cols = [c for c in X.columns if c not in cat_cols.union(obj_cols)]
+    # Fill non-categorical columns with 0
+    X[non_cat_cols] = X[non_cat_cols].fillna(0)
+    # For categorical columns, add a "missing" category and fill NaNs with it
+    for c in cat_cols:
+        if "missing" not in X[c].cat.categories:
+            X[c] = X[c].cat.add_categories(["missing"])
+        X[c] = X[c].fillna("missing")
+    # Fill object columns with "missing" then convert to category
+    for c in obj_cols:
+        X[c] = X[c].fillna("missing").astype("category")
+    # Ensure no object columns remain
     obj_cols = X.select_dtypes(include="object").columns
     for c in obj_cols:
         X[c] = X[c].astype("category")
