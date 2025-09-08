@@ -69,8 +69,13 @@ def run_train(cfg: dict):
                 X_tr = X_tr.drop(columns=drop_cols_tr)
                 if X_val is not None:
                     X_val = X_val.drop(columns=drop_cols_tr, errors="ignore")
+            feature_cols_tr = [c for c in feature_cols if c not in drop_cols_tr]
+            categorical_cols_tr = [c for c in categorical_cols if c not in drop_cols_tr]
+            X_tr = X_tr[feature_cols_tr]
+            if X_val is not None:
+                X_val = X_val[feature_cols_tr]
 
-            cat_tr = [c for c in categorical_cols if c in X_tr.columns]
+            cat_tr = [c for c in categorical_cols_tr if c in X_tr.columns]
             cls_params = dict(cfg.get("model", {}).get("classifier", {}))
             reg_params = dict(cfg.get("model", {}).get("regressor", {}))
             if cfg.get("runtime", {}).get("use_gpu", False):
@@ -96,8 +101,8 @@ def run_train(cfg: dict):
                 reg,
                 threshold=0.5,
                 horizon=H,
-                feature_cols=feature_cols,
-                categorical_cols=categorical_cols,
+                feature_cols=feature_cols_tr,
+                categorical_cols=categorical_cols_tr,
             )
             # For threshold tuning we need y_true for validation horizon
             # Construct ground truth for va period in wide form
