@@ -43,9 +43,12 @@ def run_train(cfg: dict):
 
         def _prepare_X(fe_subset: pd.DataFrame) -> pd.DataFrame:
             X = fe_subset.drop(columns=[c for c in drop_cols if c in fe_subset.columns], errors="ignore").copy()
+            X = X.replace([np.inf, -np.inf], np.nan)
+            X = X.drop(columns=[c for c in X.columns if X[c].isna().all() or X[c].nunique() <= 1])
             obj_cols = X.select_dtypes(include="object").columns
             for c in obj_cols:
                 X[c] = X[c].astype("category").cat.codes
+            X = X.fillna(0)
             return X
 
         X_all = _prepare_X(fe)
