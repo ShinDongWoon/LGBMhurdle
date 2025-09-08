@@ -49,16 +49,11 @@ def run_train(cfg: dict):
         date_col = schema["date"]
         target_col = schema["target"]
         series_cols = schema["series"]
-        min_pos_ratio = float(cfg.get("data", {}).get("min_positive_ratio", 0.0))
-        if min_pos_ratio > 0:
-            df = ensure_min_positive_ratio(
-                df,
-                target_col,
-                min_pos_ratio,
-                seed=int(cfg.get("runtime", {}).get("seed", 42)),
-            )
-            df = df.sort_values([*series_cols, date_col]).reset_index(drop=True)
+        df = df.sort_values([*series_cols, date_col]).reset_index(drop=True)
         df["id"] = build_series_id(df, series_cols)
+
+    min_pos_ratio = float(cfg.get("data", {}).get("min_positive_ratio", 0.0))
+    seed = int(cfg.get("runtime", {}).get("seed", 42))
 
     with Timer("Feature engineering"):
         fe = run_feature_engineering(df, cfg, schema)
@@ -125,6 +120,9 @@ def run_train(cfg: dict):
                     X_tr = X_tr[feature_cols_tr]
                     if X_val is not None:
                         X_val = X_val[feature_cols_tr]
+
+                    if min_pos_ratio > 0:
+                        X_tr, y_tr = ensure_min_positive_ratio(X_tr, y_tr, min_pos_ratio, seed=seed)
 
                     cat_tr = [c for c in categorical_cols_tr if c in X_tr.columns]
                     cls_params = dict(cfg.get("model", {}).get("classifier", {}))
@@ -233,6 +231,8 @@ def run_train(cfg: dict):
                 clf_final = ZeroPredictor()
                 reg_final = ZeroPredictor()
             else:
+                if min_pos_ratio > 0:
+                    X, y = ensure_min_positive_ratio(X, y, min_pos_ratio, seed=seed)
                 clf_final = HurdleClassifier(cls_params, categorical_feature=categorical_cols)
                 reg_final = HurdleRegressor(reg_params, categorical_feature=categorical_cols)
                 clf_final.fit(X, y, None, None, early_stopping_rounds=0)
