@@ -2,7 +2,7 @@
 runtime:
   seed: 42
   n_jobs: -1
-  use_gpu: false
+  use_gpu: true
 
 io:
   artifacts_dir: "./artifacts"
@@ -30,6 +30,7 @@ model:
     colsample_bytree: 0.8
     reg_alpha: 1.0
     reg_lambda: 1.0
+    device_type: gpu
   regressor:
     objective: "tweedie"
     tweedie_variance_power: 1.2
@@ -39,6 +40,7 @@ model:
     subsample: 0.8
     colsample_bytree: 0.8
     min_data_in_leaf: 50
+    device_type: gpu
   calibration:
     enable: false
     method: "isotonic"
