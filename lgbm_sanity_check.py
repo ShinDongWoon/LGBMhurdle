@@ -56,11 +56,11 @@ def add_group_lags(df, key_col, target_col, lags=(1,7,14,28)):
     # zero-run 길이
     # (이전 상태에서 0이 연속으로 몇 번 나왔는지)
     z = (df[target_col] == 0).astype(int)
-    zero_run = z.groupby(df[key_col]).apply(
-        lambda s: s.groupby((s != s.shift()).cumsum()).cumcount() + 1
+    df["zero_run"] = (
+        z.groupby(df[key_col])
+         .transform(lambda s: s.groupby((s != s.shift()).cumsum()).cumcount() + 1)
+         .where(z == 1, 0)
     )
-    zero_run.index = z.index
-    df["zero_run"] = zero_run.where(z == 1, 0).values
     df.fillna(0, inplace=True)
     return df
 
