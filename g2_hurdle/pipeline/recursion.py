@@ -1,10 +1,14 @@
 
 import pandas as pd
 import numpy as np
-from ..fe import (
-    prepare_features,
+from ..fe import prepare_features
+from ..fe.lags_rolling import (
     create_lags_and_rolling_features,
+    update_lags_and_rollings,
+)
+from ..fe.intermittency import (
     create_intermittency_features,
+    update_intermittency_features,
 )
 from ..fe.static import prepare_static_future_features
 from ..utils.logging import get_logger
@@ -64,29 +68,32 @@ def recursive_forecast_grouped(
     out_rows = []
     for sid, g in context_df.groupby("_series_id"):
         g = g.sort_values(date_col).copy()
-        # Keep a mutable context for this series
-        ctx = g.copy()
         preds, probs, qtys = [], [], []
-        last_date = ctx[date_col].max()
-        static_feats = prepare_static_future_features(ctx, schema, cfg, H)
-        for h in range(1, H+1):
+        last_date = g[date_col].max()
+        static_feats = prepare_static_future_features(g, schema, cfg, H)
+
+        fe_g = create_lags_and_rolling_features(g, target_col, series_cols, cfg)
+        if cfg.get("features", {}).get("intermittency", {}).get("enable", True):
+            fe_g = create_intermittency_features(fe_g, target_col, series_cols)
+
+        lags = cfg.get("features", {}).get("lags", [1, 2, 7, 14, 28, 365])
+        rolls = cfg.get("features", {}).get("rollings", [7, 14, 28])
+        tail_len = max(max(lags), max(rolls)) + 1
+        ctx = fe_g.tail(tail_len).reset_index(drop=True)
+
+        last_y = g[target_col].iloc[-1]
+        ctx = update_lags_and_rollings(ctx, last_y, cfg)
+        if cfg.get("features", {}).get("intermittency", {}).get("enable", True):
+            ctx = update_intermittency_features(ctx, last_y)
+
+        for h in range(1, H + 1):
             future_date = last_date + pd.Timedelta(days=h)
-            new_row = ctx.iloc[-1:].copy()
-            new_row[date_col] = future_date
-            new_row[target_col] = np.nan
-            ctx_ext = pd.concat([ctx, new_row], ignore_index=True)
-            # Dynamic features only
-            fe_ctx = create_lags_and_rolling_features(
-                ctx_ext, target_col, series_cols, cfg
-            )
-            if cfg.get("features", {}).get("intermittency", {}).get("enable", True):
-                fe_ctx = create_intermittency_features(
-                    fe_ctx, target_col, series_cols
-                )
-            dyn_row = fe_ctx.iloc[[-1]].reset_index(drop=True)
+
+            dyn_row = ctx.iloc[[-1]].copy()
+            dyn_row[date_col] = future_date
             stat_row = static_feats.loc[[future_date]].reset_index(drop=True)
-            fe_row = pd.concat([dyn_row, stat_row], axis=1)
-            drop_cols = [date_col, target_col, *series_cols, "_series_id"]
+            fe_row = pd.concat([dyn_row.reset_index(drop=True), stat_row], axis=1)
+            drop_cols = [date_col, target_col, *series_cols]
             X_row, _, _ = prepare_features(
                 fe_row,
                 drop_cols,
@@ -94,10 +101,13 @@ def recursive_forecast_grouped(
                 categorical_cols=categorical_cols,
             )
             yhat, p, q = _predict_one_step(X_row, clf, reg, threshold)
-            preds.append(yhat); probs.append(p); qtys.append(q)
-            # inject prediction as if observed for next step
-            new_row[target_col] = yhat
-            ctx = pd.concat([ctx.iloc[:-1], new_row], ignore_index=True)
+            preds.append(yhat)
+            probs.append(p)
+            qtys.append(q)
+
+            ctx = update_lags_and_rollings(ctx, yhat, cfg)
+            if cfg.get("features", {}).get("intermittency", {}).get("enable", True):
+                ctx = update_intermittency_features(ctx, yhat)
 
         row = {"id": sid}
         for i, v in enumerate(preds, start=1):

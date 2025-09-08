@@ -42,3 +42,39 @@ def create_intermittency_features(df: pd.DataFrame, target_col: str, series_cols
     else:
         out = _apply(out)
     return out
+
+
+def update_intermittency_features(ctx_tail: pd.DataFrame, new_y: float) -> pd.DataFrame:
+    """Update intermittency-related features for the next step."""
+
+    ctx = ctx_tail.copy()
+
+    # infer target column similar to lag/rolling update
+    num_cols = ctx.select_dtypes(include="number").columns
+    target_candidates = [
+        c
+        for c in num_cols
+        if c
+        not in {
+            "days_since_last_sale",
+            "rolling_zero_count_7d",
+            "avg_interdemand_interval",
+        }
+    ]
+    target_col = target_candidates[0] if target_candidates else None
+
+    # historical columns exclude the last placeholder row
+    history_y = ctx[target_col].iloc[:-1] if target_col else pd.Series(dtype=float)
+
+    prev_dsls = ctx.iloc[-2]["days_since_last_sale"] if len(ctx) >= 2 else 0
+    dsls_next = 0 if new_y > 0 else prev_dsls + 1
+
+    zero_flags = (history_y == 0).astype(int)
+    rolling_zero = zero_flags.tail(7).sum()
+    avg_idi = ctx["days_since_last_sale"].iloc[:-1].tail(28).mean()
+
+    ctx.loc[ctx.index[-1], "days_since_last_sale"] = dsls_next
+    ctx.loc[ctx.index[-1], "rolling_zero_count_7d"] = rolling_zero
+    ctx.loc[ctx.index[-1], "avg_interdemand_interval"] = avg_idi
+    ctx.fillna(0, inplace=True)
+    return ctx
