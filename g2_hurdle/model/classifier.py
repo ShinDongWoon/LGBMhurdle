@@ -1,0 +1,27 @@
+
+from typing import Optional, Sequence
+import numpy as np
+
+try:
+    from lightgbm import LGBMClassifier
+except Exception as e:
+    LGBMClassifier = None
+
+class HurdleClassifier:
+    def __init__(self, model_params: dict, categorical_feature: Optional[Sequence[str]]=None):
+        if LGBMClassifier is None:
+            raise ImportError("lightgbm not installed. Please install lightgbm.")
+        self.model = LGBMClassifier(**model_params)
+        self.categorical_feature = categorical_feature or "auto"
+
+    def fit(self, X_train, y_train, X_val=None, y_val=None, early_stopping_rounds=100):
+        y_train_bin = (y_train > 0).astype(int)
+        fit_params = {}
+        if X_val is not None and y_val is not None:
+            fit_params["eval_set"] = [(X_val, (y_val > 0).astype(int))]
+            fit_params["early_stopping_rounds"] = early_stopping_rounds
+        self.model.fit(X_train, y_train_bin, **fit_params)
+
+    def predict_proba(self, X):
+        p = self.model.predict_proba(X)
+        return p[:,1] if p.ndim == 2 else p
