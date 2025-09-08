@@ -33,6 +33,12 @@ class HurdleRegressor:
         self.categorical_feature = categorical_feature or "auto"
 
     def fit(self, X_train, y_train, X_val=None, y_val=None, early_stopping_rounds=100):
+        """Fit the underlying regressor on positive targets only.
+
+        After filtering to positive samples, columns that become constant
+        (``<=1`` unique value) are removed from both training and validation
+        data to avoid feeding non-informative features to the model.
+        """
         mask_tr = (y_train > 0)
         pos_count = int(mask_tr.sum())
         min_leaf = int(self.model.get_params().get("min_data_in_leaf", 20))
@@ -46,19 +52,39 @@ class HurdleRegressor:
             )
             self.model.set_params(min_data_in_leaf=pos_count)
         X_tr, y_tr = X_train[mask_tr], y_train[mask_tr]
-        fit_params = {
-            "categorical_feature": self.categorical_feature,
-        }
-        if hasattr(X_train, "columns"):
-            fit_params["feature_name"] = list(X_train.columns)
+        if hasattr(X_tr, "nunique"):
+            tr_counts = X_tr.nunique()
+            drop_cols = tr_counts[tr_counts <= 1].index
+            if len(drop_cols) > 0:
+                X_tr = X_tr.drop(columns=drop_cols)
         if X_val is not None and y_val is not None:
             mask_va = (y_val > 0)
             X_va, y_va = X_val[mask_va], y_val[mask_va]
-            fit_params["eval_set"] = [(X_va, y_va)]
+            if hasattr(X_va, "nunique"):
+                va_counts = X_va.nunique()
+                drop_va_cols = va_counts[va_counts <= 1].index
+                if len(drop_va_cols) > 0:
+                    X_va = X_va.drop(columns=drop_va_cols)
+            if hasattr(X_tr, "columns") and hasattr(X_va, "columns"):
+                common = X_tr.columns.intersection(X_va.columns)
+                X_tr = X_tr[common]
+                X_va = X_va[common]
+            fit_params = {
+                "categorical_feature": self.categorical_feature,
+                "eval_set": [(X_va, y_va)],
+            }
+            if hasattr(X_tr, "columns"):
+                fit_params["feature_name"] = list(X_tr.columns)
             if early_stopping_rounds > 0:
                 callbacks = fit_params.get("callbacks", [])
                 callbacks.append(lightgbm.early_stopping(early_stopping_rounds))
                 fit_params["callbacks"] = callbacks
+        else:
+            fit_params = {
+                "categorical_feature": self.categorical_feature,
+            }
+            if hasattr(X_tr, "columns"):
+                fit_params["feature_name"] = list(X_tr.columns)
         self.model.fit(X_tr, y_tr, **fit_params)
 
     def predict(self, X):
