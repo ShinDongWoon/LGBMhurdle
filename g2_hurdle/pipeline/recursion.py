@@ -4,6 +4,9 @@ import numpy as np
 from ..fe import run_feature_engineering
 
 def _predict_one_step(df_future_row, clf, reg, threshold):
+    obj_cols = df_future_row.select_dtypes(include="object").columns
+    for c in obj_cols:
+        df_future_row[c] = df_future_row[c].astype("category")
     p = clf.predict_proba(df_future_row)
     q = reg.predict(df_future_row)
     yhat = (p > threshold).astype(float) * np.maximum(0.0, q)

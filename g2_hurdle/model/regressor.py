@@ -1,6 +1,7 @@
 
 from typing import Optional, Sequence
 import numpy as np
+import pandas as pd
 
 try:
     import lightgbm
@@ -18,11 +19,20 @@ class HurdleRegressor:
 
     def fit(self, X_train, y_train, X_val=None, y_val=None, early_stopping_rounds=100):
         mask_tr = (y_train > 0)
-        X_tr, y_tr = X_train[mask_tr], y_train[mask_tr]
+        if isinstance(X_train, pd.DataFrame):
+            X_tr = X_train.loc[mask_tr]
+        else:
+            X_tr = X_train[mask_tr]
+        y_tr = y_train[mask_tr]
+
         fit_params = {}
         if X_val is not None and y_val is not None:
             mask_va = (y_val > 0)
-            X_va, y_va = X_val[mask_va], y_val[mask_va]
+            if isinstance(X_val, pd.DataFrame):
+                X_va = X_val.loc[mask_va]
+            else:
+                X_va = X_val[mask_va]
+            y_va = y_val[mask_va]
             fit_params["eval_set"] = [(X_va, y_va)]
             if early_stopping_rounds > 0:
                 callbacks = fit_params.get("callbacks", [])

@@ -45,7 +45,7 @@ def run_train(cfg: dict):
             X = fe_subset.drop(columns=[c for c in drop_cols if c in fe_subset.columns], errors="ignore").copy()
             obj_cols = X.select_dtypes(include="object").columns
             for c in obj_cols:
-                X[c] = X[c].astype("category").cat.codes
+                X[c] = X[c].astype("category")
             return X
 
         X_all = _prepare_X(fe)
@@ -68,10 +68,10 @@ def run_train(cfg: dict):
             fe_tr = fe.loc[tr_inner.index]
             fe_va = fe.loc[va_inner.index] if va_inner is not None else None
 
-            X_tr = _prepare_X(fe_tr).values
+            X_tr = _prepare_X(fe_tr)
             y_tr = tr_inner[target_col].values
             if va_inner is not None:
-                X_val = _prepare_X(fe_va).values
+                X_val = _prepare_X(fe_va)
                 y_val = va_inner[target_col].values
             else:
                 X_val, y_val = None, None
@@ -129,7 +129,7 @@ def run_train(cfg: dict):
 
     # Retrain on full data
     with Timer("Final fit on full data"):
-        X = X_all.values
+        X = X_all
         y = y_all
         cls_params = dict(cfg.get("model", {}).get("classifier", {}))
         reg_params = dict(cfg.get("model", {}).get("regressor", {}))
