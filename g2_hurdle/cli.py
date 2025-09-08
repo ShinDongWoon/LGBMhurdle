@@ -15,7 +15,7 @@ def main():
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p_train = sub.add_parser("train", help="Train hurdle models")
-    p_train.add_argument("--train_csv", required=True, help="Path to training CSV (use data/test.csv per spec)")
+    p_train.add_argument("--train_csv", required=True, help="Path to training CSV (expected: data/train.csv)")
     p_train.add_argument("--config", required=True, help="YAML config path")
 
     p_pred = sub.add_parser("predict", help="Predict with trained models and create submission")
