@@ -8,13 +8,22 @@ logger = get_logger("Recursion")
 
 
 def _predict_one_step(X, clf, reg, threshold):
-    if X.shape[1] != len(getattr(reg, "feature_names_", [])):
+    reg_feats = len(getattr(reg, "feature_names_", []))
+    clf_feats = len(getattr(clf, "feature_names_", []))
+    if clf_feats != reg_feats:
         logger.fatal(
-            "Feature shape mismatch: X has %d columns while regressor expects %d",
-            X.shape[1],
-            len(getattr(reg, "feature_names_", [])),
+            "Feature count mismatch: classifier expects %d vs regressor %d",
+            clf_feats,
+            reg_feats,
         )
-    assert X.shape[1] == len(getattr(reg, "feature_names_", [])), "Regressor feature mismatch"
+    assert clf_feats == reg_feats, "Classifier/regressor feature count mismatch"
+    if X.shape[1] != reg_feats:
+        logger.fatal(
+            "Feature shape mismatch: X has %d columns while models expect %d",
+            X.shape[1],
+            reg_feats,
+        )
+    assert X.shape[1] == reg_feats, "Regressor feature mismatch"
     p = clf.predict_proba(X)
     q = reg.predict(X)
     yhat = (p > threshold).astype(float) * np.maximum(0.0, q)

@@ -130,31 +130,29 @@ def run_train(cfg: dict):
                     if cfg.get("runtime", {}).get("use_gpu", False):
                         cls_params.setdefault("device_type", "gpu")
                         reg_params.setdefault("device_type", "gpu")
-                    clf = HurdleClassifier(cls_params, categorical_feature=cat_tr)
                     reg = HurdleRegressor(reg_params, categorical_feature=cat_tr)
 
-                    with Timer(f"Fit fold (train_end={tr_end.date()}) - classifier"):
-                        clf.fit(X_tr, y_tr, X_val, y_val, early_stopping_rounds=esr)
-                        # store fitted feature names for later intersection
-                        clf.feature_names_ = list(
-                            getattr(getattr(clf, "model", clf), "feature_name_", getattr(clf, "feature_names_", []))
-                        )
+                    # Fit regressor first
                     with Timer(f"Fit fold (train_end={tr_end.date()}) - regressor"):
                         reg.fit(X_tr, y_tr, X_val, y_val, early_stopping_rounds=esr)
                         reg.feature_names_ = list(
                             getattr(getattr(reg, "model", reg), "feature_name_", getattr(reg, "feature_names_", []))
                         )
 
-                    # Compute shared feature names between classifier and regressor
-                    clf_feats = getattr(clf, "feature_names_", [])
-                    reg_feats = getattr(reg, "feature_names_", [])
-                    shared_feats = [f for f in clf_feats if f in reg_feats]
-                    if len(clf_feats) != len(reg_feats):
-                        logger.warning(
-                            f"Fold (train_end={tr_end.date()}): classifier features={len(clf_feats)} vs regressor features={len(reg_feats)}; using intersection {len(shared_feats)}."
+                    # Refit classifier on regressor-selected features
+                    shared_feats = list(getattr(reg, "feature_names_", []))
+                    X_tr = X_tr[shared_feats]
+                    if X_val is not None:
+                        X_val = X_val[shared_feats]
+                    cat_tr = [c for c in cat_tr if c in shared_feats]
+                    clf = HurdleClassifier(cls_params, categorical_feature=cat_tr)
+                    with Timer(f"Fit fold (train_end={tr_end.date()}) - classifier"):
+                        clf.fit(X_tr, y_tr, X_val, y_val, early_stopping_rounds=esr)
+                        clf.feature_names_ = list(
+                            getattr(getattr(clf, "model", clf), "feature_name_", getattr(clf, "feature_names_", []))
                         )
 
-                    # Recursive simulate on validation horizon per id
+                    # Recursive simulate on validation horizon per id using regressor feature list
                     from .recursion import recursive_forecast_grouped
                     # Use context: all rows up to tr_end per series
                     context = df[df[date_col] <= tr_end].copy()
@@ -167,7 +165,7 @@ def run_train(cfg: dict):
                         threshold=0.5,
                         horizon=H,
                         feature_cols=shared_feats,
-                        categorical_cols=categorical_cols_tr,
+                        categorical_cols=cat_tr,
                     )
             if skip_fold:
                 ids = df_va["id"].unique()
