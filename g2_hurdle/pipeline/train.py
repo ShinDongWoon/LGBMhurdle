@@ -93,11 +93,20 @@ def run_train(cfg: dict):
                 X_val, y_val = None, None
 
             min_pos_samples = int(cfg.get("cv", {}).get("min_positive_samples", 0))
-            pos_count = int((y_tr > 0).sum())
-            skip_fold = pos_count < min_pos_samples
-            if skip_fold:
+            min_neg_samples = int(cfg.get("cv", {}).get("min_negative_samples", 0))
+            y_tr_bin = (y_tr > 0)
+            unique = np.unique(y_tr_bin)
+            pos_count = int(y_tr_bin.sum())
+            neg_count = int(len(y_tr_bin) - pos_count)
+            skip_fold = False
+            if len(unique) < 2:
+                skip_fold = True
                 logger.warning(
-                    f"Fold (train_end={tr_end.date()}): only {pos_count} positive samples < {min_pos_samples}; skipping training.")
+                    f"Fold (train_end={tr_end.date()}): training data has a single class; skipping training.")
+            elif pos_count < min_pos_samples or neg_count < min_neg_samples:
+                skip_fold = True
+                logger.warning(
+                    f"Fold (train_end={tr_end.date()}): only {pos_count} positive or {neg_count} negative samples; skipping training.")
 
             preds_df = None
             if not skip_fold:
@@ -200,10 +209,18 @@ def run_train(cfg: dict):
             cls_params.setdefault("device_type", "gpu")
             reg_params.setdefault("device_type", "gpu")
         min_pos_samples = int(cfg.get("cv", {}).get("min_positive_samples", 0))
-        pos_count_full = int((y > 0).sum())
-        if pos_count_full < min_pos_samples:
+        min_neg_samples = int(cfg.get("cv", {}).get("min_negative_samples", 0))
+        y_bin_full = (y > 0)
+        unique_full = np.unique(y_bin_full)
+        pos_count_full = int(y_bin_full.sum())
+        neg_count_full = int(len(y_bin_full) - pos_count_full)
+        if len(unique_full) < 2:
+            logger.warning("Full data has a single class; using ZeroPredictor.")
+            clf_final = ZeroPredictor()
+            reg_final = ZeroPredictor()
+        elif pos_count_full < min_pos_samples or neg_count_full < min_neg_samples:
             logger.warning(
-                f"Full data has only {pos_count_full} positive samples < {min_pos_samples}; using ZeroPredictor.")
+                f"Full data has only {pos_count_full} positive or {neg_count_full} negative samples; using ZeroPredictor.")
             clf_final = ZeroPredictor()
             reg_final = ZeroPredictor()
         else:

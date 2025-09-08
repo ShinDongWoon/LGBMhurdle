@@ -53,6 +53,7 @@ cv:
   n_folds_min: 2
   time_series_split: "rolling_origin"
   min_positive_samples: 10
+  min_negative_samples: 10
 
 threshold:
   grid_start: 0.01
