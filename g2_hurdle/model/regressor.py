@@ -46,6 +46,8 @@ class HurdleRegressor:
             if pos_count == 0:
                 logger.warning("No positive samples; using ZeroPredictor for regressor.")
                 self.model = ZeroPredictor()
+                if hasattr(X_train, "columns"):
+                    self.feature_names_ = list(X_train.columns)
                 return self
             logger.warning(
                 f"min_data_in_leaf={min_leaf} exceeds positive samples={pos_count}; reducing to {pos_count}."
@@ -66,7 +68,7 @@ class HurdleRegressor:
                 if len(drop_va_cols) > 0:
                     X_va = X_va.drop(columns=drop_va_cols)
             if hasattr(X_tr, "columns") and hasattr(X_va, "columns"):
-                common = X_tr.columns.intersection(X_va.columns)
+                common = X_tr.columns.intersection(X_va.columns, sort=False)
                 X_tr = X_tr[common]
                 X_va = X_va[common]
             fit_params = {
@@ -86,6 +88,8 @@ class HurdleRegressor:
             if hasattr(X_tr, "columns"):
                 fit_params["feature_name"] = list(X_tr.columns)
         self.model.fit(X_tr, y_tr, **fit_params)
+        if hasattr(X_tr, "columns"):
+            self.feature_names_ = list(X_tr.columns)
 
     def predict(self, X):
         return self.model.predict(X)
