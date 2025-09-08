@@ -74,8 +74,8 @@ def run_train(cfg: dict):
             cls_params = dict(cfg.get("model", {}).get("classifier", {}))
             reg_params = dict(cfg.get("model", {}).get("regressor", {}))
             if cfg.get("runtime", {}).get("use_gpu", False):
-                cls_params.setdefault("device_type", "gpu"); cls_params.setdefault("device", "gpu")
-                reg_params.setdefault("device_type", "gpu"); reg_params.setdefault("device", "gpu")
+                cls_params.setdefault("device_type", "gpu")
+                reg_params.setdefault("device_type", "gpu")
             clf = HurdleClassifier(cls_params, categorical_feature=cat_tr)
             reg = HurdleRegressor(reg_params, categorical_feature=cat_tr)
 
@@ -146,8 +146,8 @@ def run_train(cfg: dict):
         cls_params = dict(cfg.get("model", {}).get("classifier", {}))
         reg_params = dict(cfg.get("model", {}).get("regressor", {}))
         if cfg.get("runtime", {}).get("use_gpu", False):
-            cls_params.setdefault("device_type", "gpu"); cls_params.setdefault("device", "gpu")
-            reg_params.setdefault("device_type", "gpu"); reg_params.setdefault("device", "gpu")
+            cls_params.setdefault("device_type", "gpu")
+            reg_params.setdefault("device_type", "gpu")
         clf_final = HurdleClassifier(cls_params, categorical_feature=categorical_cols)
         reg_final = HurdleRegressor(reg_params, categorical_feature=categorical_cols)
         clf_final.fit(X, y, None, None, early_stopping_rounds=0)
