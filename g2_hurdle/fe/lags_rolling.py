@@ -26,11 +26,15 @@ def create_lags_and_rolling_features(df: pd.DataFrame, target_col: str, series_c
             group[f"lag_{lag}"] = s.shift(lag)
         s_shift = s.shift(1)  # leakage guard
         for w in rolls:
-            r = s_shift.rolling(window=w)
+            r = s_shift.rolling(window=w, min_periods=1)
             group[f"roll_mean_{w}"] = r.mean()
             group[f"roll_std_{w}"] = r.std()
             group[f"roll_min_{w}"] = r.min()
             group[f"roll_max_{w}"] = r.max()
+        for c in group.select_dtypes(include="category").columns:
+            if 0 not in group[c].cat.categories:
+                group[c] = group[c].cat.add_categories([0])
+        group.fillna(0, inplace=True)
         return group
 
     if series_cols:
