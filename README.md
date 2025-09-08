@@ -14,6 +14,21 @@ python -m g2_hurdle.cli predict \
 ```
 All imports are relative; drop this folder as project root and run the commands.
 
+## Quickstart (Colab)
+
+Run the top-level scripts directly in a notebook:
+
+```python
+!python dependency.py  # installs required packages
+!python train.py       # uses g2_hurdle/configs/korean.yaml and data/train.csv
+!python predict.py     # uses g2_hurdle/configs/korean.yaml, data/test, and data/sample_submission.csv
+```
+
+By default, both scripts load the configuration from `g2_hurdle/configs/korean.yaml`.
+`train.py` reads `data/train.csv` and stores model artifacts in `./artifacts`.
+`predict.py` consumes the artifacts, expects test files in `data/test` with a
+`data/sample_submission.csv`, and writes predictions to `outputs/submission.csv`.
+
 ## Dependencies
 
 Run `python dependency.py` to install dependencies.
