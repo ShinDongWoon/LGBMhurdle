@@ -68,8 +68,13 @@ def run_train(cfg: dict):
             else:
                 X_val, y_val = None, None
 
-            clf = HurdleClassifier(cfg.get("model", {}).get("classifier", {}))
-            reg = HurdleRegressor(cfg.get("model", {}).get("regressor", {}))
+            cls_params = dict(cfg.get("model", {}).get("classifier", {}))
+            reg_params = dict(cfg.get("model", {}).get("regressor", {}))
+            if cfg.get("runtime", {}).get("use_gpu", False):
+                cls_params.setdefault("device_type", "gpu"); cls_params.setdefault("device", "gpu")
+                reg_params.setdefault("device_type", "gpu"); reg_params.setdefault("device", "gpu")
+            clf = HurdleClassifier(cls_params)
+            reg = HurdleRegressor(reg_params)
 
             with Timer(f"Fit fold (train_end={tr_end.date()}) - classifier"):
                 clf.fit(X_tr, y_tr, X_val, y_val, early_stopping_rounds=esr)
@@ -118,8 +123,13 @@ def run_train(cfg: dict):
     with Timer("Final fit on full data"):
         X = X_all.values
         y = y_all
-        clf_final = HurdleClassifier(cfg.get("model", {}).get("classifier", {}))
-        reg_final = HurdleRegressor(cfg.get("model", {}).get("regressor", {}))
+        cls_params = dict(cfg.get("model", {}).get("classifier", {}))
+        reg_params = dict(cfg.get("model", {}).get("regressor", {}))
+        if cfg.get("runtime", {}).get("use_gpu", False):
+            cls_params.setdefault("device_type", "gpu"); cls_params.setdefault("device", "gpu")
+            reg_params.setdefault("device_type", "gpu"); reg_params.setdefault("device", "gpu")
+        clf_final = HurdleClassifier(cls_params)
+        reg_final = HurdleRegressor(reg_params)
         clf_final.fit(X, y, None, None, early_stopping_rounds=0)
         reg_final.fit(X, y, None, None, early_stopping_rounds=0)
 
