@@ -28,6 +28,9 @@ def run_predict(cfg: dict):
         features_meta = art.get("features.json", {})
         feature_cols = features_meta.get("feature_cols", [])
         categorical_cols = features_meta.get("categorical_cols", [])
+        train_cfg = art.get("config.json", {})
+        if "features" in train_cfg:
+            cfg["features"] = train_cfg["features"]
 
     H = int(cfg.get("cv", {}).get("horizon", 7))
 
