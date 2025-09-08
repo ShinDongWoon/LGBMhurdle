@@ -29,6 +29,33 @@ class HurdleClassifier:
         if hasattr(X_train, "columns"):
             fit_params["feature_name"] = list(X_train.columns)
 
+        # Remove constant columns
+        if hasattr(X_train, "nunique"):
+            nunique = X_train.nunique()
+            informative_cols = nunique[nunique > 1].index
+            X_train = X_train[informative_cols]
+            if X_val is not None:
+                X_val = X_val[informative_cols]
+            if "feature_name" in fit_params:
+                fit_params["feature_name"] = [
+                    f for f in fit_params["feature_name"] if f in informative_cols
+                ]
+            n_features = len(informative_cols)
+        else:
+            nunique = np.apply_along_axis(lambda col: np.unique(col).size, 0, X_train)
+            informative_mask = nunique > 1
+            X_train = X_train[:, informative_mask]
+            if X_val is not None:
+                X_val = X_val[:, informative_mask]
+            if "feature_name" in fit_params:
+                fit_params["feature_name"] = [
+                    f for f, keep in zip(fit_params["feature_name"], informative_mask) if keep
+                ]
+            n_features = informative_mask.sum()
+
+        if n_features == 0:
+            raise ValueError("No informative features after constant-column removal.")
+
         if X_val is not None and y_val is not None:
             y_val_bin = (y_val > 0).astype(int)
             if np.unique(y_val_bin).size < 2:
