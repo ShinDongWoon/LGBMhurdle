@@ -41,7 +41,7 @@ class HurdleRegressor:
         """
         mask_tr = (y_train > 0)
         pos_count = int(mask_tr.sum())
-        min_leaf = int(self.model.get_params().get("min_data_in_leaf", 20))
+        min_leaf = int(self.model.get_params().get("min_child_samples", 20))
         if pos_count < min_leaf:
             if pos_count == 0:
                 logger.warning("No positive samples; using ZeroPredictor for regressor.")
@@ -50,9 +50,9 @@ class HurdleRegressor:
                     self.feature_names_ = list(X_train.columns)
                 return self
             logger.warning(
-                f"min_data_in_leaf={min_leaf} exceeds positive samples={pos_count}; reducing to {pos_count}."
+                f"min_child_samples={min_leaf} exceeds positive samples={pos_count}; reducing to {pos_count}."
             )
-            self.model.set_params(min_data_in_leaf=pos_count)
+            self.model.set_params(min_child_samples=pos_count)
         X_tr, y_tr = X_train[mask_tr], y_train[mask_tr]
         if hasattr(X_tr, "nunique"):
             tr_counts = X_tr.nunique()

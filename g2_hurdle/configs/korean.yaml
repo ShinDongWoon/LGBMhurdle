@@ -31,6 +31,7 @@ model:
     colsample_bytree: 0.8
     reg_alpha: 1.0
     reg_lambda: 1.0
+    verbose: -1
     device_type: gpu
   regressor:
     objective: "tweedie"
@@ -40,7 +41,8 @@ model:
     n_estimators: 4000
     subsample: 0.8
     colsample_bytree: 0.8
-    min_data_in_leaf: 50
+    min_child_samples: 50
+    verbose: -1
     device_type: gpu
   calibration:
     enable: false
