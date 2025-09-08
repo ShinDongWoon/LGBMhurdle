@@ -2,10 +2,21 @@
 import pandas as pd
 import numpy as np
 from ..fe import run_feature_engineering, prepare_features
+from ..utils.logging import get_logger
 
-def _predict_one_step(df_future_row, clf, reg, threshold):
-    p = clf.predict_proba(df_future_row)
-    q = reg.predict(df_future_row)
+logger = get_logger("Recursion")
+
+
+def _predict_one_step(X, clf, reg, threshold):
+    if X.shape[1] != len(getattr(reg, "feature_names_", [])):
+        logger.fatal(
+            "Feature shape mismatch: X has %d columns while regressor expects %d",
+            X.shape[1],
+            len(getattr(reg, "feature_names_", [])),
+        )
+    assert X.shape[1] == len(getattr(reg, "feature_names_", [])), "Regressor feature mismatch"
+    p = clf.predict_proba(X)
+    q = reg.predict(X)
     yhat = (p > threshold).astype(float) * np.maximum(0.0, q)
     return float(yhat[0]), float(p[0]), float(q[0])
 
