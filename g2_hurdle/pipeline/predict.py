@@ -7,7 +7,12 @@ import pandas as pd
 from ..utils.logging import get_logger
 from ..utils.timer import Timer
 from ..utils.io import load_artifacts, load_data
-from ..utils.keys import build_series_id, align_to_submission, ensure_wide_columns
+from ..utils.keys import (
+    build_series_id,
+    align_to_submission,
+    ensure_wide_columns,
+    normalize_series_name,
+)
 from ..fe import run_feature_engineering, prepare_features
 from .recursion import recursive_forecast_grouped
 
@@ -91,7 +96,7 @@ def run_predict(cfg: dict):
         out = sub.rename(columns={row_key_col: "row_key"}).copy()
 
         # Normalize menu column names to match prediction ids
-        menu_map = {c: re.sub(r"\s+", "_", str(c).strip()) for c in menu_cols}
+        menu_map = {c: normalize_series_name(c) for c in menu_cols}
 
         for idx, row in out.iterrows():
             row_key = row["row_key"]
