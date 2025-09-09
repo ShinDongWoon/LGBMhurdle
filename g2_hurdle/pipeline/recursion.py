@@ -1,15 +1,9 @@
 
 import pandas as pd
 import numpy as np
+import numba as nb
+
 from ..fe import prepare_features
-from ..fe.lags_rolling import (
-    create_lags_and_rolling_features,
-    update_lags_and_rollings,
-)
-from ..fe.intermittency import (
-    create_intermittency_features,
-    update_intermittency_features,
-)
 from ..fe.static import prepare_static_future_features
 from ..utils.logging import get_logger
 
@@ -57,6 +51,143 @@ def _predict_batch(X, clf, reg, threshold: float):
     yhat = (p > threshold).astype(np.float32) * np.maximum(np.float32(0.0), q)
     return yhat, p, q
 
+
+@nb.njit
+def _compute_dynamic_features(
+    hist_matrix,
+    dsls_hist_matrix,
+    lag_steps,
+    lag_idx,
+    roll_steps,
+    roll_mean_idx,
+    roll_std_idx,
+    roll_min_idx,
+    roll_max_idx,
+    dsls_idx,
+    rzero_idx,
+    avg_idi_idx,
+    out,
+):
+    """Populate dynamic features from history buffers."""
+    n_series, tail_len = hist_matrix.shape
+    for i in range(n_series):
+        # lags
+        for k in range(lag_steps.shape[0]):
+            out[i, lag_idx[k]] = hist_matrix[i, tail_len - lag_steps[k]]
+
+        # rolling statistics
+        for k in range(roll_steps.shape[0]):
+            w = roll_steps[k]
+            start = tail_len - w
+            s = 0.0
+            ss = 0.0
+            mn = np.inf
+            mx = -np.inf
+            for j in range(start, tail_len):
+                v = hist_matrix[i, j]
+                s += v
+                ss += v * v
+                if v < mn:
+                    mn = v
+                if v > mx:
+                    mx = v
+            mean = s / w
+            if roll_mean_idx[k] >= 0:
+                out[i, roll_mean_idx[k]] = mean
+            if roll_std_idx[k] >= 0:
+                if w > 1:
+                    var = (ss - s * s / w) / (w - 1)
+                    out[i, roll_std_idx[k]] = np.sqrt(var)
+                else:
+                    out[i, roll_std_idx[k]] = 0.0
+            if roll_min_idx[k] >= 0:
+                out[i, roll_min_idx[k]] = mn
+            if roll_max_idx[k] >= 0:
+                out[i, roll_max_idx[k]] = mx
+
+        # intermittency-related features
+        if dsls_idx >= 0:
+            out[i, dsls_idx] = dsls_hist_matrix[i, dsls_hist_matrix.shape[1] - 1]
+        if rzero_idx >= 0:
+            cnt = 0.0
+            start = tail_len - 7
+            for j in range(start, tail_len):
+                if hist_matrix[i, j] == 0.0:
+                    cnt += 1.0
+            out[i, rzero_idx] = cnt
+        if avg_idi_idx >= 0:
+            s = 0.0
+            for j in range(dsls_hist_matrix.shape[1]):
+                s += dsls_hist_matrix[i, j]
+            out[i, avg_idi_idx] = s / dsls_hist_matrix.shape[1]
+
+
+@nb.njit
+def _update_history_dsls(hist_matrix, dsls_hist_matrix, new_y):
+    """Update history buffers with new predictions."""
+    n_series, tail_len = hist_matrix.shape
+    dsls_window = dsls_hist_matrix.shape[1]
+    for i in range(n_series):
+        # shift history
+        for j in range(tail_len - 1):
+            hist_matrix[i, j] = hist_matrix[i, j + 1]
+        hist_matrix[i, tail_len - 1] = new_y[i]
+
+        # update dsls
+        dsls = dsls_hist_matrix[i, dsls_window - 1]
+        if new_y[i] > 0.0:
+            dsls = 0.0
+        else:
+            dsls += 1.0
+        for j in range(dsls_window - 1):
+            dsls_hist_matrix[i, j] = dsls_hist_matrix[i, j + 1]
+        dsls_hist_matrix[i, dsls_window - 1] = dsls
+
+
+def _init_dsls_history(y: np.ndarray, window: int = 28) -> np.ndarray:
+    """Compute days-since-last-sale history."""
+    dsls = np.zeros(len(y), dtype=np.float32)
+    last = 0
+    for i, v in enumerate(y):
+        if v > 0:
+            last = 0
+        else:
+            last += 1
+        dsls[i] = last
+    if len(dsls) < window:
+        dsls_hist = np.pad(dsls[-window:], (window - len(dsls), 0), constant_values=0)
+    else:
+        dsls_hist = dsls[-window:]
+    return dsls_hist.astype(np.float32)
+
+
+def _build_dynamic_row(
+    history: np.ndarray,
+    dsls_hist: np.ndarray | None,
+    lags,
+    rolls,
+    date_col: str,
+    future_date,
+):
+    """Construct a DataFrame row of dynamic features for feature ordering."""
+    row = {}
+    for lag in lags:
+        row[f"lag_{lag}"] = float(history[-lag])
+    for w in rolls:
+        window = history[-w:]
+        row[f"roll_mean_{w}"] = float(window.mean())
+        row[f"roll_std_{w}"] = float(window.std(ddof=1))
+        row[f"roll_min_{w}"] = float(window.min())
+        row[f"roll_max_{w}"] = float(window.max())
+    if dsls_hist is not None:
+        dsls = dsls_hist[-1]
+        row["days_since_last_sale"] = float(dsls)
+        row["rolling_zero_count_7d"] = float(np.sum(history[-7:] == 0))
+        row["avg_interdemand_interval"] = float(dsls_hist.mean())
+    out = pd.DataFrame([row])
+    out[date_col] = future_date
+    return out
+
 def recursive_forecast_grouped(
     context_df: pd.DataFrame,
     schema: dict,
@@ -67,7 +198,7 @@ def recursive_forecast_grouped(
     horizon: int = 7,
     feature_cols=None,
     categorical_cols=None,
-):
+): 
     """Run recursive forecast per series group (identified by schema['series']).
     context_df: must contain at least the last 28 days per series.
     Returns DataFrame with columns: id, D1..Dh and optionally stacks of p,q for analysis.
@@ -84,33 +215,44 @@ def recursive_forecast_grouped(
     context_df["_series_id"] = id_series
 
     drop_cols = [date_col, target_col, *series_cols]
+    lags = cfg.get("features", {}).get("lags", [1, 2, 7, 14, 28, 365])
+    rolls = cfg.get("features", {}).get("rollings", [7, 14, 28])
+    tail_len = max(max(lags), max(rolls)) + 1
+    use_intermittency = cfg.get("features", {}).get("intermittency", {}).get(
+        "enable", True
+    )
+
+    # Per-series caches
     series_data = {}
+    histories = []
+    dsls_histories = []
+    static_frames = {}
     static_cache = {}
+
     for sid, g in context_df.groupby("_series_id"):
         g = g.sort_values(date_col).copy()
         last_date = g[date_col].max()
+
         static_feats = static_cache.get(last_date)
         if static_feats is None:
             static_feats = prepare_static_future_features(g, schema, cfg, H)
             static_cache[last_date] = static_feats
+        static_frames[sid] = static_feats
 
-        fe_g = create_lags_and_rolling_features(g, target_col, series_cols, cfg)
-        if cfg.get("features", {}).get("intermittency", {}).get("enable", True):
-            fe_g = create_intermittency_features(fe_g, target_col, series_cols)
+        y = g[target_col].astype(np.float32).values
+        if len(y) < tail_len:
+            hist = np.pad(y, (tail_len - len(y), 0), constant_values=0)
+        else:
+            hist = y[-tail_len:]
+        histories.append(hist.astype(np.float32))
 
-        lags = cfg.get("features", {}).get("lags", [1, 2, 7, 14, 28, 365])
-        rolls = cfg.get("features", {}).get("rollings", [7, 14, 28])
-        tail_len = max(max(lags), max(rolls)) + 1
-        ctx = fe_g.tail(tail_len).reset_index(drop=True)
-
-        last_y = g[target_col].iloc[-1]
-        ctx = update_lags_and_rollings(ctx, last_y, cfg)
-        if cfg.get("features", {}).get("intermittency", {}).get("enable", True):
-            ctx = update_intermittency_features(ctx, last_y)
+        if use_intermittency:
+            dsls_hist = _init_dsls_history(y)
+        else:
+            dsls_hist = np.zeros(28, dtype=np.float32)
+        dsls_histories.append(dsls_hist)
 
         series_data[sid] = {
-            "ctx": ctx,
-            "static": static_feats,
             "last_date": last_date,
             "preds": [],
             "probs": [],
@@ -122,12 +264,13 @@ def recursive_forecast_grouped(
     # Determine feature order once
     if feature_cols is None:
         fe_rows = []
-        for sid in series_ids:
+        for sid, hist, dsls_hist in zip(series_ids, histories, dsls_histories):
             info = series_data[sid]
             future_date = info["last_date"] + pd.Timedelta(days=1)
-            dyn_row = info["ctx"].iloc[[-1]].copy()
-            dyn_row[date_col] = future_date
-            stat_row = info["static"].loc[[future_date]].reset_index(drop=True)
+            dyn_row = _build_dynamic_row(
+                hist, dsls_hist if use_intermittency else None, lags, rolls, date_col, future_date
+            )
+            stat_row = static_frames[sid].loc[[future_date]].reset_index(drop=True)
             fe_rows.append(pd.concat([dyn_row.reset_index(drop=True), stat_row], axis=1))
         fe_df = pd.concat(fe_rows, axis=0, ignore_index=True)
         _, feature_cols, categorical_cols = prepare_features(
@@ -152,57 +295,76 @@ def recursive_forecast_grouped(
                 mat[:, feat_idx[c]] = tmp[c].astype(np.float32).values
         static_array_cache[last_date] = mat
 
-    # Prepare per-series arrays
-    for sid, info in series_data.items():
-        ctx_row = info["ctx"].iloc[[-1]].drop(columns=drop_cols, errors="ignore")
-        dyn = np.zeros(len(feature_cols), dtype=np.float32)
-        row = ctx_row.iloc[0]
-        for c, v in row.items():
-            if c in feat_idx:
-                if pd.isna(v) or np.isinf(v):
-                    v = 0.0
-                dyn[feat_idx[c]] = float(v)
-        info["dyn_array"] = dyn
-        info["static_arrays"] = static_array_cache[info["last_date"]]
-        del info["static"]
+    # Build static matrix aligned with series order
+    static_matrix = np.stack(
+        [static_array_cache[series_data[sid]["last_date"]] for sid in series_ids], axis=0
+    )
+
+    # Prepare history arrays
+    hist_matrix = np.vstack(histories)
+    dsls_hist_matrix = np.vstack(dsls_histories)
+
+    # Precompute index arrays for numba routines
+    lag_steps = np.array(lags, dtype=np.int64)
+    lag_idx = np.array([feat_idx.get(f"lag_{l}", -1) for l in lags], dtype=np.int64)
+    roll_steps = np.array(rolls, dtype=np.int64)
+    roll_mean_idx = np.array(
+        [feat_idx.get(f"roll_mean_{w}", -1) for w in rolls], dtype=np.int64
+    )
+    roll_std_idx = np.array(
+        [feat_idx.get(f"roll_std_{w}", -1) for w in rolls], dtype=np.int64
+    )
+    roll_min_idx = np.array(
+        [feat_idx.get(f"roll_min_{w}", -1) for w in rolls], dtype=np.int64
+    )
+    roll_max_idx = np.array(
+        [feat_idx.get(f"roll_max_{w}", -1) for w in rolls], dtype=np.int64
+    )
+    dsls_idx = feat_idx.get("days_since_last_sale", -1)
+    rzero_idx = feat_idx.get("rolling_zero_count_7d", -1)
+    avg_idi_idx = feat_idx.get("avg_interdemand_interval", -1)
+
+    n_series = len(series_ids)
+    n_feat = len(feature_cols)
+    dyn_batch = np.zeros((n_series, n_feat), dtype=np.float32)
 
     for h in range(1, H + 1):
-        batch = []
-        sid_order = []
-        for sid in series_ids:
-            info = series_data[sid]
-            X = info["dyn_array"] + info["static_arrays"][h - 1]
-            batch.append(X)
-            sid_order.append(sid)
-        X_batch = np.vstack(batch)
+        dyn_batch.fill(0)
+        _compute_dynamic_features(
+            hist_matrix,
+            dsls_hist_matrix,
+            lag_steps,
+            lag_idx,
+            roll_steps,
+            roll_mean_idx,
+            roll_std_idx,
+            roll_min_idx,
+            roll_max_idx,
+            dsls_idx,
+            rzero_idx,
+            avg_idi_idx,
+            dyn_batch,
+        )
+        X_batch = dyn_batch + static_matrix[:, h - 1, :]
         yhat_batch, p_batch, q_batch = _predict_batch(X_batch, clf, reg, threshold)
 
-        for sid, yhat, p, q in zip(sid_order, yhat_batch, p_batch, q_batch):
+        for i, sid in enumerate(series_ids):
             info = series_data[sid]
-            info["preds"].append(np.float32(yhat))
-            info["probs"].append(np.float32(p))
-            info["qtys"].append(np.float32(q))
-            info["ctx"] = update_lags_and_rollings(info["ctx"], float(yhat), cfg)
-            if cfg.get("features", {}).get("intermittency", {}).get("enable", True):
-                info["ctx"] = update_intermittency_features(info["ctx"], float(yhat))
-            if h < H:
-                ctx_row = info["ctx"].iloc[[-1]].drop(columns=drop_cols, errors="ignore")
-                info["dyn_array"].fill(0)
-                row = ctx_row.iloc[0]
-                for c, v in row.items():
-                    if c in feat_idx:
-                        if pd.isna(v) or np.isinf(v):
-                            v = 0.0
-                        info["dyn_array"][feat_idx[c]] = float(v)
+            info["preds"].append(float(yhat_batch[i]))
+            info["probs"].append(float(p_batch[i]))
+            info["qtys"].append(float(q_batch[i]))
+
+        if h < H:
+            _update_history_dsls(hist_matrix, dsls_hist_matrix, yhat_batch)
 
     out_rows = []
-    for sid, info in series_data.items():
+    for sid in series_ids:
+        info = series_data[sid]
         row = {"id": sid}
         for i, v in enumerate(info["preds"], start=1):
             row[f"D{i}"] = float(v)
         out_rows.append(row)
     out = pd.DataFrame(out_rows)
-    # Ensure D1..Dh exist
     need_cols = ensure_wide_columns(H)
     for c in need_cols:
         if c not in out.columns:
