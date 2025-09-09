@@ -88,7 +88,7 @@ def run_predict(cfg: dict):
 
     preds = pd.concat(pred_all.values(), ignore_index=True)
     # Load sample submission and align
-    sub = pd.read_csv(sample_path)
+    sub = pd.read_csv(sample_path, encoding="utf-8-sig", dtype=str)
     id_col = "id" if "id" in sub.columns else None
     if id_col is None:
         row_key_col = sub.columns[0]
