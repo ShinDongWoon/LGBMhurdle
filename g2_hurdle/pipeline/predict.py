@@ -116,7 +116,8 @@ def run_predict(cfg: dict):
                 if not val.empty:
                     out.at[idx, orig_col] = val.iloc[0]
 
-        out.to_csv(out_path, index=False)
+        assert list(out.columns) == list(sub.columns), "Output columns differ from sample submission"
+        out.to_csv(out_path, index=False, encoding="utf-8-sig")
         logger.info(f"Saved submission to {out_path}")
         return
 
@@ -126,5 +127,6 @@ def run_predict(cfg: dict):
         if c not in preds.columns:
             preds[c] = np.nan
     out = align_to_submission(sub, preds[["id", *needed]], id_col="id")
-    out.to_csv(out_path, index=False)
+    assert list(out.columns) == list(sub.columns), "Output columns differ from sample submission"
+    out.to_csv(out_path, index=False, encoding="utf-8-sig")
     logger.info(f"Saved submission to {out_path}")
