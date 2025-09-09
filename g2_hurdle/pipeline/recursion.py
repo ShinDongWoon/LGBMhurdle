@@ -16,26 +16,29 @@ from ..utils.logging import get_logger
 logger = get_logger("Recursion")
 
 
-def _predict_batch(X: np.ndarray, clf, reg, threshold: float):
+def _predict_batch(X_df: pd.DataFrame, clf, reg, threshold: float):
     """Predict in batch ensuring feature alignment."""
-    reg_feats = len(getattr(reg, "feature_names_", []))
-    clf_feats = len(getattr(clf, "feature_names_", []))
-    if clf_feats != reg_feats:
+    reg_feats = list(getattr(reg, "feature_names_", []))
+    clf_feats = list(getattr(clf, "feature_names_", []))
+    x_cols = list(X_df.columns)
+
+    if x_cols != reg_feats:
         logger.fatal(
-            "Feature count mismatch: classifier expects %d vs regressor %d",
-            clf_feats,
-            reg_feats,
-        )
-        raise AssertionError("Classifier/regressor feature count mismatch")
-    if X.shape[1] != reg_feats:
-        logger.fatal(
-            "Feature shape mismatch: X has %d columns while models expect %d",
-            X.shape[1],
+            "Regressor feature mismatch: DataFrame has %s but regressor expects %s",
+            x_cols,
             reg_feats,
         )
         raise AssertionError("Regressor feature mismatch")
-    p = clf.predict_proba(X).astype(np.float32, copy=False)
-    q = reg.predict(X).astype(np.float32, copy=False)
+    if x_cols != clf_feats:
+        logger.fatal(
+            "Classifier feature mismatch: DataFrame has %s but classifier expects %s",
+            x_cols,
+            clf_feats,
+        )
+        raise AssertionError("Classifier feature mismatch")
+
+    p = clf.predict_proba(X_df).astype(np.float32, copy=False)
+    q = reg.predict(X_df).astype(np.float32, copy=False)
     yhat = (p > threshold).astype(np.float32) * np.maximum(np.float32(0.0), q)
     return yhat, p, q
 
@@ -118,8 +121,12 @@ def recursive_forecast_grouped(
             feature_cols=feature_cols,
             categorical_cols=categorical_cols,
         )
-        X_batch = X_batch_df.to_numpy(dtype=np.float32, copy=False)
-        yhat_batch, p_batch, q_batch = _predict_batch(X_batch, clf, reg, threshold)
+        num_cols = X_batch_df.select_dtypes(include=[np.number]).columns
+        if len(num_cols) == len(X_batch_df.columns):
+            X_batch_df = X_batch_df.astype(np.float32)
+        else:
+            X_batch_df[num_cols] = X_batch_df[num_cols].astype(np.float32)
+        yhat_batch, p_batch, q_batch = _predict_batch(X_batch_df, clf, reg, threshold)
 
         for sid, yhat, p, q in zip(sid_order, yhat_batch, p_batch, q_batch):
             info = series_data[sid]
