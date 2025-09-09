@@ -84,19 +84,21 @@
 ## 📂 데이터 디렉토리 구조 (Data Directory Structure)
 
 보안상의 이유로 원본 데이터는 저장소에 포함되어 있지 않습니다. 코드를 정상적으로 실행하려면 프로젝트 최상위 경로에 `data` 디렉토리를 생성하고 아래와 같은 구조로 데이터를 배치해야 합니다.
-"""
+
+'''
 lgbmhurdle/
-├── data/
-│   ├── train.csv               # 훈련 데이터
-│   ├── test/                   # 평가(테스트) 데이터 폴더
-│   │   ├── TEST_00.csv
-│   │   ├── TEST_01.csv
-│   │   └── ...                 # 여러 개의 테스트 파일
-│   └── sample_submission.csv   # 제출 양식 파일
-├── g2_hurdle/
-├── scripts/
-└── ...
-"""
+    data/
+        train.csv               # 훈련 데이터
+        test/                   # 평가(테스트) 데이터 폴더
+            TEST_00.csv
+            TEST_01.csv
+            ...                 # 여러 개의 테스트 파일
+        sample_submission.csv   # 제출 양식 파일
+    g2_hurdle/
+    scripts/
+    ...
+'''
+
 - **/data/train.csv**: 모델 학습을 위한 시계열 데이터입니다.
 - **/data/test/**: 예측을 수행할 평가용 데이터셋입니다. 각 `TEST_*.csv` 파일은 특정 기간의 데이터를 담고 있으며, 모델은 이 파일의 마지막 시점으로부터 7일 후까지의 판매량을 예측해야 합니다.
 - **/data/sample_submission.csv**: 최종 예측 결과를 어떤 형식으로 저장해야 하는지 정의하는 샘플 파일입니다.
