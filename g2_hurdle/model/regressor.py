@@ -71,8 +71,13 @@ class HurdleRegressor:
                 common = X_tr.columns.intersection(X_va.columns, sort=False)
                 X_tr = X_tr[common]
                 X_va = X_va[common]
+        if isinstance(self.categorical_feature, list) and hasattr(X_tr, "columns"):
+            cats = [c for c in self.categorical_feature if c in X_tr.columns]
+        else:
+            cats = self.categorical_feature
+        if X_val is not None and y_val is not None:
             fit_params = {
-                "categorical_feature": self.categorical_feature,
+                "categorical_feature": cats,
                 "eval_set": [(X_va, y_va)],
             }
             if hasattr(X_tr, "columns"):
@@ -83,7 +88,7 @@ class HurdleRegressor:
                 fit_params["callbacks"] = callbacks
         else:
             fit_params = {
-                "categorical_feature": self.categorical_feature,
+                "categorical_feature": cats,
             }
             if hasattr(X_tr, "columns"):
                 fit_params["feature_name"] = list(X_tr.columns)

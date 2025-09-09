@@ -23,9 +23,7 @@ class HurdleClassifier:
         if len(unique_classes) < 2:
             raise ValueError("Training data contains only one class.")
 
-        fit_params = {
-            "categorical_feature": self.categorical_feature,
-        }
+        fit_params = {}
         if hasattr(X_train, "columns"):
             fit_params["feature_name"] = list(X_train.columns)
 
@@ -55,6 +53,12 @@ class HurdleClassifier:
 
         if n_features == 0:
             raise ValueError("No informative features after constant-column removal.")
+
+        if isinstance(self.categorical_feature, list) and hasattr(X_train, "columns"):
+            cats = [c for c in self.categorical_feature if c in X_train.columns]
+        else:
+            cats = self.categorical_feature
+        fit_params["categorical_feature"] = cats
 
         if X_val is not None and y_val is not None:
             y_val_bin = (y_val > 0).astype(int)
