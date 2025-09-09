@@ -302,7 +302,8 @@ def recursive_forecast_grouped(
     # Convert cached static features to arrays once
     static_array_cache = {}
     for last_date, static_df in static_cache.items():
-        tmp = static_df.reset_index(drop=True).copy()
+        tmp = static_df.reset_index(drop=True)
+        tmp = tmp[[c for c in feature_cols if c in tmp.columns]].copy()
         for c in categorical_cols or []:
             if c in tmp.columns:
                 tmp[c] = tmp[c].astype("category").cat.codes.astype(np.float32)
