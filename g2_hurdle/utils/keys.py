@@ -1,6 +1,13 @@
 
 import pandas as pd
 import numpy as np
+import re
+
+def normalize_series_name(s):
+    if isinstance(s, pd.Series):
+        return s.astype(str).str.strip().str.replace(r"\s+", "_", regex=True)
+    return re.sub(r"\s+", "_", str(s).strip())
+
 
 def build_series_id(df: pd.DataFrame, series_cols):
     if not series_cols:
@@ -8,8 +15,7 @@ def build_series_id(df: pd.DataFrame, series_cols):
         return pd.Series(["__single__"]*len(df), index=df.index)
     parts = []
     for c in series_cols:
-        s = df[c].astype(str).str.strip().str.replace(r"\s+", "_", regex=True)
-        parts.append(s)
+        parts.append(normalize_series_name(df[c]))
     key = parts[0]
     for s in parts[1:]:
         key = key + "__" + s
