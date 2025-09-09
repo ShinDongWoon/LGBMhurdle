@@ -1,5 +1,6 @@
 
 import os, glob
+import re
 import numpy as np
 import pandas as pd
 
@@ -37,11 +38,12 @@ def run_predict(cfg: dict):
     H = int(cfg.get("cv", {}).get("horizon", 7))
 
     # Collect predictions across TEST_* files
-    pred_all = []
+    pred_all = {}
     test_files = sorted(glob.glob(os.path.join(test_dir, "TEST_*.csv")))
     if not test_files:
         raise FileNotFoundError("No TEST_*.csv files found")
     for f in test_files:
+        test_name = os.path.splitext(os.path.basename(f))[0]
         df, _schema = load_data(
             f,
             {"data": {"date_col_candidates": [schema.get("date")], "target_col_candidates": [schema.get("target")], "id_col_candidates": schema.get("series", [])}} if schema else cfg,
@@ -77,30 +79,41 @@ def run_predict(cfg: dict):
             feature_cols=feature_cols,
             categorical_cols=categorical_cols,
         )
-        pred_all.append(preds_df)
+        pred_all[test_name] = preds_df
 
-    preds = pd.concat(pred_all, ignore_index=True)
+    preds = pd.concat(pred_all.values(), ignore_index=True)
     # Load sample submission and align
     sub = pd.read_csv(sample_path)
     id_col = "id" if "id" in sub.columns else None
     if id_col is None:
-        # try to build id from schema series columns if present in sample
-        if schema and all(c in sub.columns for c in schema.get("series", [])):
-            sub = sub.copy()
-            sub["id"] = build_series_id(sub, schema.get("series"))
-            id_col = "id"
-        else:
-            # fallback: merge on index (unsafe but last resort)
-            logger.warning("No id column found in sample_submission; falling back to row-wise fill")
-            needed = ensure_wide_columns(H)
-            out = sub.copy()
-            for i, c in enumerate(needed):
-                if c in out.columns and i < len(preds):
-                    mask = out[c].isna()
-                    out.loc[mask, c] = preds[c].values[:mask.sum()]
-            out.to_csv(out_path, index=False)
-            logger.info(f"Saved submission to {out_path} (fallback merge)")
-            return
+        row_key_col = sub.columns[0]
+        menu_cols = [c for c in sub.columns if c != row_key_col]
+        out = sub.rename(columns={row_key_col: "row_key"}).copy()
+
+        # Normalize menu column names to match prediction ids
+        menu_map = {c: re.sub(r"\s+", "_", str(c).strip()) for c in menu_cols}
+
+        for idx, row in out.iterrows():
+            row_key = row["row_key"]
+            if "+" not in row_key:
+                continue
+            test_part, day_part = row_key.split("+", 1)
+            day_match = re.search(r"\d+", day_part)
+            if not day_match:
+                continue
+            day_col = f"D{int(day_match.group())}"
+            preds_df = pred_all.get(test_part)
+            if preds_df is None or day_col not in preds_df.columns:
+                continue
+            for orig_col in menu_cols:
+                pid = menu_map[orig_col]
+                val = preds_df.loc[preds_df["id"] == pid, day_col]
+                if not val.empty:
+                    out.at[idx, orig_col] = val.iloc[0]
+
+        out.to_csv(out_path, index=False)
+        logger.info(f"Saved submission to {out_path}")
+        return
 
     needed = ensure_wide_columns(H)
     # ensure preds has D1..Dh
