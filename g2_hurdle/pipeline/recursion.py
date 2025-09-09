@@ -16,29 +16,44 @@ from ..utils.logging import get_logger
 logger = get_logger("Recursion")
 
 
-def _predict_batch(X_df: pd.DataFrame, clf, reg, threshold: float):
-    """Predict in batch ensuring feature alignment."""
-    reg_feats = list(getattr(reg, "feature_names_", []))
-    clf_feats = list(getattr(clf, "feature_names_", []))
-    x_cols = list(X_df.columns)
+def _predict_batch(X, clf, reg, threshold: float):
+    """Predict in batch ensuring feature alignment.
 
-    if x_cols != reg_feats:
-        logger.fatal(
-            "Regressor feature mismatch: DataFrame has %s but regressor expects %s",
-            x_cols,
-            reg_feats,
-        )
-        raise AssertionError("Regressor feature mismatch")
-    if x_cols != clf_feats:
-        logger.fatal(
-            "Classifier feature mismatch: DataFrame has %s but classifier expects %s",
-            x_cols,
-            clf_feats,
-        )
-        raise AssertionError("Classifier feature mismatch")
+    Parameters
+    ----------
+    X : Union[pd.DataFrame, np.ndarray]
+        Feature matrix. When a DataFrame is provided, feature names are
+        validated against the fitted models. For a NumPy array, it is assumed
+        that the column order matches the training schema.
+    clf, reg : LightGBM models
+        Classifier and regressor used for the hurdle model.
+    threshold : float
+        Probability threshold to decide whether to use the regression output.
+    """
 
-    p = clf.predict_proba(X_df).astype(np.float32, copy=False)
-    q = reg.predict(X_df).astype(np.float32, copy=False)
+    if isinstance(X, pd.DataFrame):
+        reg_feats = list(getattr(reg, "feature_names_", []))
+        clf_feats = list(getattr(clf, "feature_names_", []))
+        x_cols = list(X.columns)
+
+        if x_cols != reg_feats:
+            logger.fatal(
+                "Regressor feature mismatch: DataFrame has %s but regressor expects %s",
+                x_cols,
+                reg_feats,
+            )
+            raise AssertionError("Regressor feature mismatch")
+        if x_cols != clf_feats:
+            logger.fatal(
+                "Classifier feature mismatch: DataFrame has %s but classifier expects %s",
+                x_cols,
+                clf_feats,
+            )
+            raise AssertionError("Classifier feature mismatch")
+
+    p_raw = clf.predict_proba(X)
+    p = (p_raw if p_raw.ndim == 1 else p_raw[:, 1]).astype(np.float32, copy=False)
+    q = reg.predict(X).astype(np.float32, copy=False)
     yhat = (p > threshold).astype(np.float32) * np.maximum(np.float32(0.0), q)
     return yhat, p, q
 
@@ -104,33 +119,63 @@ def recursive_forecast_grouped(
 
     series_ids = list(series_data.keys())
 
-    for h in range(1, H + 1):
+    # Determine feature order once
+    if feature_cols is None:
         fe_rows = []
-        sid_order = []
         for sid in series_ids:
             info = series_data[sid]
-            future_date = info["last_date"] + pd.Timedelta(days=h)
+            future_date = info["last_date"] + pd.Timedelta(days=1)
             dyn_row = info["ctx"].iloc[[-1]].copy()
             dyn_row[date_col] = future_date
             stat_row = info["static"].loc[[future_date]].reset_index(drop=True)
-            fe_rows.append(
-                pd.concat([dyn_row.reset_index(drop=True), stat_row], axis=1)
-            )
-            sid_order.append(sid)
-
+            fe_rows.append(pd.concat([dyn_row.reset_index(drop=True), stat_row], axis=1))
         fe_df = pd.concat(fe_rows, axis=0, ignore_index=True)
-        X_batch_df, _, _ = prepare_features(
+        _, feature_cols, categorical_cols = prepare_features(
             fe_df,
             drop_cols,
-            feature_cols=feature_cols,
-            categorical_cols=categorical_cols,
+            feature_cols=None,
+            categorical_cols=None,
         )
-        num_cols = X_batch_df.select_dtypes(include=[np.number]).columns
-        if len(num_cols) == len(X_batch_df.columns):
-            X_batch_df = X_batch_df.astype(np.float32)
-        else:
-            X_batch_df[num_cols] = X_batch_df[num_cols].astype(np.float32)
-        yhat_batch, p_batch, q_batch = _predict_batch(X_batch_df, clf, reg, threshold)
+    feat_idx = {c: i for i, c in enumerate(feature_cols)}
+
+    # Convert cached static features to arrays once
+    static_array_cache = {}
+    for last_date, static_df in static_cache.items():
+        tmp = static_df.reset_index(drop=True).copy()
+        for c in categorical_cols or []:
+            if c in tmp.columns:
+                tmp[c] = tmp[c].astype("category").cat.codes.astype(np.float32)
+        tmp = tmp.fillna(0)
+        mat = np.zeros((len(tmp), len(feature_cols)), dtype=np.float32)
+        for c in tmp.columns:
+            if c in feat_idx:
+                mat[:, feat_idx[c]] = tmp[c].astype(np.float32).values
+        static_array_cache[last_date] = mat
+
+    # Prepare per-series arrays
+    for sid, info in series_data.items():
+        ctx_row = info["ctx"].iloc[[-1]].drop(columns=drop_cols, errors="ignore")
+        dyn = np.zeros(len(feature_cols), dtype=np.float32)
+        row = ctx_row.iloc[0]
+        for c, v in row.items():
+            if c in feat_idx:
+                if pd.isna(v) or np.isinf(v):
+                    v = 0.0
+                dyn[feat_idx[c]] = float(v)
+        info["dyn_array"] = dyn
+        info["static_arrays"] = static_array_cache[info["last_date"]]
+        del info["static"]
+
+    for h in range(1, H + 1):
+        batch = []
+        sid_order = []
+        for sid in series_ids:
+            info = series_data[sid]
+            X = info["dyn_array"] + info["static_arrays"][h - 1]
+            batch.append(X)
+            sid_order.append(sid)
+        X_batch = np.vstack(batch)
+        yhat_batch, p_batch, q_batch = _predict_batch(X_batch, clf, reg, threshold)
 
         for sid, yhat, p, q in zip(sid_order, yhat_batch, p_batch, q_batch):
             info = series_data[sid]
@@ -140,6 +185,15 @@ def recursive_forecast_grouped(
             info["ctx"] = update_lags_and_rollings(info["ctx"], float(yhat), cfg)
             if cfg.get("features", {}).get("intermittency", {}).get("enable", True):
                 info["ctx"] = update_intermittency_features(info["ctx"], float(yhat))
+            if h < H:
+                ctx_row = info["ctx"].iloc[[-1]].drop(columns=drop_cols, errors="ignore")
+                info["dyn_array"].fill(0)
+                row = ctx_row.iloc[0]
+                for c, v in row.items():
+                    if c in feat_idx:
+                        if pd.isna(v) or np.isinf(v):
+                            v = 0.0
+                        info["dyn_array"][feat_idx[c]] = float(v)
 
     out_rows = []
     for sid, info in series_data.items():
