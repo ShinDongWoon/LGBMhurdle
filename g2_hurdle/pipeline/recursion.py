@@ -45,9 +45,27 @@ def _predict_batch(X, clf, reg, threshold: float):
             )
             raise AssertionError("Classifier feature mismatch")
 
-    p_raw = clf.predict_proba(X)
-    p = (p_raw if p_raw.ndim == 1 else p_raw[:, 1]).astype(np.float32, copy=False)
-    q = reg.predict(X).astype(np.float32, copy=False)
+        X_arr = X.values
+    else:
+        X_arr = np.asarray(X)
+
+    clf_core = getattr(clf, "model", clf)
+    reg_core = getattr(reg, "model", reg)
+
+    if hasattr(clf_core, "booster_"):
+        p_raw = clf_core.booster_.predict(X_arr)
+    else:
+        p_raw = clf_core.predict_proba(X_arr)
+        if p_raw.ndim == 2:
+            p_raw = p_raw[:, 1]
+
+    if hasattr(reg_core, "booster_"):
+        q_raw = reg_core.booster_.predict(X_arr)
+    else:
+        q_raw = reg_core.predict(X_arr)
+
+    p = p_raw.astype(np.float32)
+    q = q_raw.astype(np.float32)
     yhat = (p > threshold).astype(np.float32) * np.maximum(np.float32(0.0), q)
     return yhat, p, q
 
