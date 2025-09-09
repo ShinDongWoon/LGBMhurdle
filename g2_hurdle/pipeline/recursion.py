@@ -70,10 +70,14 @@ def recursive_forecast_grouped(
 
     drop_cols = [date_col, target_col, *series_cols]
     series_data = {}
+    static_cache = {}
     for sid, g in context_df.groupby("_series_id"):
         g = g.sort_values(date_col).copy()
         last_date = g[date_col].max()
-        static_feats = prepare_static_future_features(g, schema, cfg, H)
+        static_feats = static_cache.get(last_date)
+        if static_feats is None:
+            static_feats = prepare_static_future_features(g, schema, cfg, H)
+            static_cache[last_date] = static_feats
 
         fe_g = create_lags_and_rolling_features(g, target_col, series_cols, cfg)
         if cfg.get("features", {}).get("intermittency", {}).get("enable", True):
