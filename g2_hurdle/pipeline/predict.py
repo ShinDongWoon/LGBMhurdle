@@ -93,13 +93,13 @@ def run_predict(cfg: dict):
     if id_col is None:
         row_key_col = sub.columns[0]
         menu_cols = [c for c in sub.columns if c != row_key_col]
-        out = sub.rename(columns={row_key_col: "row_key"}).copy()
+        out = sub.copy()
 
         # Normalize menu column names to match prediction ids
         menu_map = {c: normalize_series_name(c) for c in menu_cols}
 
         for idx, row in out.iterrows():
-            row_key = row["row_key"]
+            row_key = row[row_key_col]
             if "+" not in row_key:
                 continue
             test_part, day_part = row_key.split("+", 1)
