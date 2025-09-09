@@ -69,6 +69,9 @@ def run_train(cfg: dict):
     init_ratio = float(cfg.get("cv", {}).get("init_train_ratio", 0.7))
     esr = int(cfg.get("cv", {}).get("early_stopping_rounds", 100))
     n_jobs = int(cfg.get("runtime", {}).get("n_jobs", 1))
+    if cfg.get("runtime", {}).get("use_gpu", False) and n_jobs != 1:
+        logger.warning("use_gpu=True detected; forcing n_jobs=1 for sequential CV.")
+        n_jobs = 1
 
     y_true_all, p_all, q_all = [], [], []
     preds_all = []
