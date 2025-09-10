@@ -52,12 +52,33 @@ def create_target_encoding_features(
     out = df.copy()
     mapping = {} if mapping is None else {k: dict(v) for k, v in mapping.items()}
 
-    # Global statistics used for smoothing and unseen categories
-    global_mean = float(df[target_col].mean())
-    global_std = float(df[target_col].std(ddof=0))
-
     # Work on sorted copy to ensure time-aware encoding but keep original order
     sorted_out = out.sort_values(date_col).reset_index()
+
+    # Compute global statistics incrementally when fitting.  When an existing
+    # mapping is provided we reuse the stored global statistics instead of
+    # recomputing them from ``df``.
+    if mapping and "__global__" in mapping:
+        global_mean = float(mapping["__global__"].get("mean", 0.0))
+        global_std = float(mapping["__global__"].get("std", 0.0))
+        global_means = [global_mean] * len(sorted_out)
+        global_stds = [global_std] * len(sorted_out)
+    else:
+        global_means, global_stds = [], []
+        g_count, g_mean, g_M2 = 0, 0.0, 0.0
+        for y in sorted_out[target_col]:
+            g_std = np.sqrt(g_M2 / g_count) if g_count > 1 else 0.0
+            global_means.append(g_mean)
+            global_stds.append(g_std)
+
+            g_count += 1
+            delta = y - g_mean
+            g_mean += delta / g_count
+            g_M2 += delta * (y - g_mean)
+
+        global_mean = g_mean
+        global_std = np.sqrt(g_M2 / g_count) if g_count > 1 else 0.0
+        mapping["__global__"] = {"mean": float(global_mean), "std": float(global_std)}
 
     for col in columns:
         if col not in out.columns:
@@ -74,17 +95,19 @@ def create_target_encoding_features(
         else:
             means, stds = [], []
             stats = {}  # value -> (count, mean, M2)
-            for val, y in zip(sorted_out[col].astype(str), sorted_out[target_col]):
+            for i, (val, y) in enumerate(zip(sorted_out[col].astype(str), sorted_out[target_col])):
+                gmean = global_means[i]
+                gstd = global_stds[i]
                 count, mean, M2 = stats.get(val, (0, 0.0, 0.0))
                 if count > 0:
                     cat_mean = mean
                     cat_std = np.sqrt(M2 / count) if count > 1 else 0.0
                     w = count / (count + smoothing)
-                    enc_mean = w * cat_mean + (1 - w) * global_mean
-                    enc_std = w * cat_std + (1 - w) * global_std
+                    enc_mean = w * cat_mean + (1 - w) * gmean
+                    enc_std = w * cat_std + (1 - w) * gstd
                 else:
-                    enc_mean = global_mean
-                    enc_std = global_std
+                    enc_mean = gmean
+                    enc_std = gstd
                 means.append(enc_mean)
                 stds.append(enc_std)
 
