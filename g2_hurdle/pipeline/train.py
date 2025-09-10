@@ -31,7 +31,14 @@ class ZeroPredictor:
         return np.zeros(len(X))
 
 def _split_train_valid_by_tail_dates(df, date_col, ratio_tail=28):
-    # validation is the last `ratio_tail` unique dates of training range
+    """Split ``df`` into inner train and validation sets by tail dates.
+
+    The validation set consists of the most recent ``ratio_tail`` unique dates
+    of ``df``.  All rows in the returned training frame occur strictly earlier
+    in time than the validation frame, ensuring that features for the training
+    portion are computed without peeking into future information.
+    """
+
     udates = sorted(df[date_col].unique())
     if len(udates) <= ratio_tail:
         return df, None
@@ -94,13 +101,41 @@ def run_train(cfg: dict):
         df_va = df.loc[va_mask].copy()
         tr_inner, va_inner = _split_train_valid_by_tail_dates(df_tr, date_col, ratio_tail=28)
 
-        X_tr = X_all.loc[tr_inner.index, feature_cols]
+        X_tr = X_all.loc[tr_inner.index, feature_cols].copy()
         y_tr = tr_inner[target_col].values
         if va_inner is not None:
-            X_val = X_all.loc[va_inner.index, feature_cols]
+            X_val = X_all.loc[va_inner.index, feature_cols].copy()
             y_val = va_inner[target_col].values
         else:
             X_val, y_val = None, None
+
+        # Add group aggregate features using only df_tr to avoid leakage
+        agg_cols = []
+        if "store_id" in df_tr.columns:
+            store_stats = (
+                df_tr.groupby("store_id", observed=False)[target_col]
+                .agg(["mean", "std"])
+                .rename(columns={"mean": "store_id_avg_sales", "std": "store_id_volatility"})
+            )
+            X_tr = X_tr.join(store_stats, on="store_id")
+            if X_val is not None:
+                X_val = X_val.join(store_stats, on="store_id")
+            agg_cols.extend(store_stats.columns.tolist())
+        if "menu_id" in df_tr.columns:
+            menu_stats = (
+                df_tr.groupby("menu_id", observed=False)[target_col]
+                .agg(["mean", "std"])
+                .rename(columns={"mean": "menu_id_avg_sales", "std": "menu_id_volatility"})
+            )
+            X_tr = X_tr.join(menu_stats, on="menu_id")
+            if X_val is not None:
+                X_val = X_val.join(menu_stats, on="menu_id")
+            agg_cols.extend(menu_stats.columns.tolist())
+        if agg_cols:
+            X_tr[agg_cols] = X_tr[agg_cols].fillna(0)
+            if X_val is not None:
+                X_val[agg_cols] = X_val[agg_cols].fillna(0)
+        feature_cols_fold = feature_cols + [c for c in agg_cols if c not in feature_cols]
 
         min_pos_samples = int(cfg.get("cv", {}).get("min_positive_samples", 0))
         min_neg_samples = int(cfg.get("cv", {}).get("min_negative_samples", 0))
@@ -120,12 +155,12 @@ def run_train(cfg: dict):
 
         preds_df = None
         if not skip_fold:
-            drop_cols_tr = [c for c in X_tr.columns if X_tr[c].nunique(dropna=True) <= 1]
+            drop_cols_tr = [c for c in feature_cols_fold if X_tr[c].nunique(dropna=True) <= 1]
             if drop_cols_tr:
                 X_tr = X_tr.drop(columns=drop_cols_tr)
                 if X_val is not None:
                     X_val = X_val.drop(columns=drop_cols_tr, errors="ignore")
-            feature_cols_tr = [c for c in feature_cols if c not in drop_cols_tr]
+            feature_cols_tr = [c for c in feature_cols_fold if c not in drop_cols_tr]
             categorical_cols_tr = [c for c in categorical_cols if c not in drop_cols_tr]
             if not feature_cols_tr:
                 skip_fold = True
@@ -247,10 +282,33 @@ def run_train(cfg: dict):
         logger.info(f"Optimal threshold={t_star:.3f}, CV wSMAPE≈{score:.3f}")
 
     # Retrain on full data
+    # Add group aggregate features on the full dataset for final training
+    agg_cols_full = []
+    if "store_id" in df.columns:
+        store_stats = (
+            df.groupby("store_id", observed=False)[target_col]
+            .agg(["mean", "std"])
+            .rename(columns={"mean": "store_id_avg_sales", "std": "store_id_volatility"})
+        )
+        X_all = X_all.join(store_stats, on="store_id")
+        agg_cols_full.extend(store_stats.columns.tolist())
+    if "menu_id" in df.columns:
+        menu_stats = (
+            df.groupby("menu_id", observed=False)[target_col]
+            .agg(["mean", "std"])
+            .rename(columns={"mean": "menu_id_avg_sales", "std": "menu_id_volatility"})
+        )
+        X_all = X_all.join(menu_stats, on="menu_id")
+        agg_cols_full.extend(menu_stats.columns.tolist())
+    if agg_cols_full:
+        X_all[agg_cols_full] = X_all[agg_cols_full].fillna(0)
+        feature_cols = feature_cols + [c for c in agg_cols_full if c not in feature_cols]
+
     # Repeat variance check on full dataset
     drop_cols_full = [c for c in X_all.columns if X_all[c].nunique(dropna=True) <= 1]
     if drop_cols_full:
         X_all = X_all.drop(columns=drop_cols_full)
+        feature_cols = [c for c in feature_cols if c not in drop_cols_full]
     feature_cols = X_all.columns.tolist()
     categorical_cols = X_all.select_dtypes(include="category").columns.tolist()
     if X_all.shape[1] == 0:
