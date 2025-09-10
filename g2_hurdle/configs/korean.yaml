@@ -20,7 +20,7 @@ features:
   lags: [1,2,7,14,28,365]
   rollings: [7,14,28]
   # Whether to include holiday-based features. Set to false to disable.
-  use_holidays: true
+  use_holidays: false
   intermittency: { enable: true }
 
 model:
@@ -30,8 +30,8 @@ model:
     n_estimators: 1000
     subsample: 0.9
     feature_fraction: 0.9
-    reg_alpha: 0.5
-    reg_lambda: 0.5
+    reg_alpha: 0.7
+    reg_lambda: 0.4
     verbose: -1
     device_type: gpu
     gpu_use_dp: false
