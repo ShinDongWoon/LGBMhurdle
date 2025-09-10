@@ -22,6 +22,7 @@ features:
   # Whether to include holiday-based features. Set to false to disable.
   use_holidays: true
   intermittency: { enable: true }
+  embeddings: { dim: 8 }
 
 model:
   classifier:
