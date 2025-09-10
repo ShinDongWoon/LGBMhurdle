@@ -232,6 +232,22 @@ def recursive_forecast_grouped(
     context_df = context_df.copy()
     context_df["_series_id"] = id_series
 
+    # Pre-compute aggregate stats for store_id and menu_id if available
+    store_stats = None
+    menu_stats = None
+    if "store_id" in context_df.columns:
+        store_stats = (
+            context_df.groupby("store_id", observed=False)[target_col]
+            .agg(["mean", "std"])
+            .rename(columns={"mean": "store_id_avg_sales", "std": "store_id_volatility"})
+        )
+    if "menu_id" in context_df.columns:
+        menu_stats = (
+            context_df.groupby("menu_id", observed=False)[target_col]
+            .agg(["mean", "std"])
+            .rename(columns={"mean": "menu_id_avg_sales", "std": "menu_id_volatility"})
+        )
+
     drop_cols = [date_col, target_col, *series_cols]
     lags = cfg.get("features", {}).get("lags", [1, 2, 7, 14, 28, 365])
     rolls = cfg.get("features", {}).get("rollings", [7, 14, 28])
@@ -251,10 +267,24 @@ def recursive_forecast_grouped(
         g = g.sort_values(date_col).copy()
         last_date = g[date_col].max()
 
-        static_feats = static_cache.get(last_date)
-        if static_feats is None:
-            static_feats = prepare_static_future_features(g, schema, cfg, H)
-            static_cache[last_date] = static_feats
+        # gather aggregate features for this series
+        extra_cols = {}
+        if store_stats is not None and "store_id" in g.columns:
+            s_id = g["store_id"].iloc[0]
+            if s_id in store_stats.index:
+                extra_cols.update(store_stats.loc[s_id].to_dict())
+        if menu_stats is not None and "menu_id" in g.columns:
+            m_id = g["menu_id"].iloc[0]
+            if m_id in menu_stats.index:
+                extra_cols.update(menu_stats.loc[m_id].to_dict())
+
+        base_static = static_cache.get(last_date)
+        if base_static is None:
+            base_static = prepare_static_future_features(g, schema, cfg, H)
+            static_cache[last_date] = base_static
+        static_feats = base_static.copy()
+        for k, v in extra_cols.items():
+            static_feats[k] = v
         static_frames[sid] = static_feats
 
         y = g[target_col].astype(np.float32).values
