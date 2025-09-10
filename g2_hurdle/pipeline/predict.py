@@ -68,8 +68,8 @@ def run_predict(cfg: dict):
         drop_cols = [
             schema_use["date"],
             schema_use["target"],
-            *schema_use["series"],
             "id",
+            *[c for c in schema_use["series"] if c not in ("store_id", "menu_id")],
         ]
         X_test, _, _ = prepare_features(fe, drop_cols, feature_cols, categorical_cols)
         if "holiday_name" in X_test.columns:
