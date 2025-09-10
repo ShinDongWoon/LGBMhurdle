@@ -5,7 +5,13 @@ from .fourier import create_fourier_features
 from .holiday import create_holiday_features
 
 
-def prepare_static_future_features(df: pd.DataFrame, schema: dict, cfg: dict, horizon: int) -> pd.DataFrame:
+def prepare_static_future_features(
+    df: pd.DataFrame,
+    schema: dict,
+    cfg: dict,
+    horizon: int,
+    extra_cols: dict | None = None,
+) -> pd.DataFrame:
     """Pre-compute calendar and Fourier features for all future dates.
 
     Parameters
@@ -33,5 +39,8 @@ def prepare_static_future_features(df: pd.DataFrame, schema: dict, cfg: dict, ho
     if cfg.get("features", {}).get("use_holidays"):
         out = create_holiday_features(out, date_col)
     out = create_fourier_features(out, date_col, cfg)
+    if extra_cols:
+        for k, v in extra_cols.items():
+            out[k] = v
     out = out.set_index(date_col)
     return out
