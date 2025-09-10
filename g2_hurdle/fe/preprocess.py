@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 
-def prepare_features(fe_df: pd.DataFrame, drop_cols, feature_cols=None, categorical_cols=None):
+def prepare_features(fe_df: pd.DataFrame, drop_cols, feature_cols=None, categorical_cols=None, categories_map=None):
     X = fe_df.drop(columns=[c for c in drop_cols if c in fe_df.columns], errors="ignore").copy()
     X = X.replace([np.inf, -np.inf], np.nan)
     for c in ["store_id", "menu_id"]:
@@ -42,4 +42,15 @@ def prepare_features(fe_df: pd.DataFrame, drop_cols, feature_cols=None, categori
         for c in categorical_cols or []:
             if c in X.columns:
                 X[c] = X[c].astype("category")
+
+    if categories_map:
+        for c, cats in categories_map.items():
+            if c in X.columns:
+                X[c] = (
+                    X[c]
+                    .astype("category")
+                    .cat.set_categories(cats, inplace=False)
+                    .fillna("missing")
+                )
+
     return X, feature_cols, categorical_cols

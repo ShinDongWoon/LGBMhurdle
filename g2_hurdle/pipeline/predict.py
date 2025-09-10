@@ -34,6 +34,7 @@ def run_predict(cfg: dict):
         features_meta = art.get("features.json", {})
         feature_cols = features_meta.get("feature_cols", [])
         categorical_cols = features_meta.get("categorical_cols", [])
+        categories_map = features_meta.get("categories", {})
         base_cats = ["dow", "week", "month", "quarter", "holiday_name"]
         categorical_cols = sorted(set(categorical_cols).union(base_cats))
         train_cfg = art.get("config.json", {})
@@ -72,7 +73,9 @@ def run_predict(cfg: dict):
             "id",
             *[c for c in schema_use["series"] if c not in ("store_id", "menu_id")],
         ]
-        X_test, _, _ = prepare_features(fe, drop_cols, feature_cols, categorical_cols)
+        X_test, _, _ = prepare_features(
+            fe, drop_cols, feature_cols, categorical_cols, categories_map
+        )
         if "holiday_name" in X_test.columns:
             assert pd.api.types.is_categorical_dtype(
                 X_test["holiday_name"]

@@ -79,6 +79,17 @@ def run_train(cfg: dict):
             assert pd.api.types.is_categorical_dtype(
                 X_all["holiday_name"]
             ), "holiday_name should be categorical after prepare_features"
+
+        # capture category levels for all categorical features
+        categories_map = {}
+        for c in categorical_cols:
+            if c in X_all.columns:
+                X_all[c] = X_all[c].astype("category")
+                if "missing" not in X_all[c].cat.categories:
+                    X_all[c] = X_all[c].cat.add_categories(["missing"])
+                X_all[c] = X_all[c].fillna("missing")
+                categories_map[c] = X_all[c].cat.categories.tolist()
+
         y_all = df[target_col].values
 
     H = int(cfg.get("cv", {}).get("horizon", 7))
@@ -388,7 +399,11 @@ def run_train(cfg: dict):
         "schema.json": schema,
         "config.json": cfg,
         "version.txt": f"generated_by=g2_hurdle; folds={folds}",
-        "features.json": {"feature_cols": feature_cols, "categorical_cols": categorical_cols},
+        "features.json": {
+            "feature_cols": feature_cols,
+            "categorical_cols": categorical_cols,
+            "categories": categories_map,
+        },
         "target_encoding.json": target_encoding_map,
     }
     save_artifacts(artifacts, artifacts_dir)
