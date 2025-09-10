@@ -5,6 +5,9 @@ import pandas as pd
 def prepare_features(fe_df: pd.DataFrame, drop_cols, feature_cols=None, categorical_cols=None):
     X = fe_df.drop(columns=[c for c in drop_cols if c in fe_df.columns], errors="ignore").copy()
     X = X.replace([np.inf, -np.inf], np.nan)
+    for c in ["store_id", "menu_id"]:
+        if c in X.columns:
+            X[c] = X[c].astype("category")
     # Handle missing values separately for categorical and non-categorical columns
     cat_cols = X.select_dtypes(include="category").columns
     obj_cols = X.select_dtypes(include="object").columns

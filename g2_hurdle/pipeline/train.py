@@ -58,7 +58,12 @@ def run_train(cfg: dict):
 
     with Timer("Feature engineering"):
         fe = run_feature_engineering(df, cfg, schema)
-        drop_cols = [date_col, target_col] + series_cols + ["id"]
+        drop_cols = [
+            date_col,
+            target_col,
+            "id",
+            *[c for c in series_cols if c not in ("store_id", "menu_id")],
+        ]
         X_all, feature_cols, categorical_cols = prepare_features(fe, drop_cols)
         # ensure calendar components are treated as categorical features
         base_cats = [c for c in ["dow", "week", "month", "quarter", "holiday_name"] if c in X_all.columns]
