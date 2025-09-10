@@ -19,9 +19,7 @@ def create_holiday_features(df: pd.DataFrame, date_col: str) -> pd.DataFrame:
     """
     out = df.copy()
     d = out[date_col]
-    out["is_holiday"] = d.apply(
-        lambda x: int(holidayskr.is_holiday(x.strftime("%Y-%m-%d")))
-    )
+    out["is_holiday"] = d.apply(lambda x: int(holidayskr.is_holiday(x.strftime("%Y-%m-%d"))))
     years = d.dt.year.unique()
     holiday_map = {}
     for year in years:
