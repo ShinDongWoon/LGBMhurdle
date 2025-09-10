@@ -216,7 +216,8 @@ def recursive_forecast_grouped(
     horizon: int = 7,
     feature_cols=None,
     categorical_cols=None,
-): 
+    embedding_map=None,
+):
     """Run recursive forecast per series group (identified by schema['series']).
     context_df: must contain at least the last 28 days per series.
     Returns DataFrame with columns: id, D1..Dh and optionally stacks of p,q for analysis.
@@ -248,7 +249,11 @@ def recursive_forecast_grouped(
             .rename(columns={"mean": "menu_id_avg_sales", "std": "menu_id_volatility"})
         )
 
-    drop_cols = [date_col, target_col, *series_cols]
+    drop_cols = [
+        date_col,
+        target_col,
+        *[c for c in series_cols if c not in ("store_id", "menu_id")],
+    ]
     lags = cfg.get("features", {}).get("lags", [1, 2, 7, 14, 28, 365])
     rolls = cfg.get("features", {}).get("rollings", [7, 14, 28])
     tail_len = max(max(lags), max(rolls)) + 1
@@ -285,6 +290,15 @@ def recursive_forecast_grouped(
         static_feats = base_static.copy()
         for k, v in extra_cols.items():
             static_feats[k] = v
+        for col in ("store_id", "menu_id"):
+            if col in g.columns:
+                val = str(g[col].iloc[0])
+                static_feats[col] = pd.Series([val] * len(static_feats), dtype="category")
+                if embedding_map and col in embedding_map:
+                    emb_vec = embedding_map[col].get(val)
+                    if emb_vec is not None:
+                        for j, e in enumerate(emb_vec):
+                            static_feats[f"{col}_emb_{j}"] = float(e)
         static_frames[sid] = static_feats
 
         y = g[target_col].astype(np.float32).values
@@ -329,9 +343,9 @@ def recursive_forecast_grouped(
         )
     feat_idx = {c: i for i, c in enumerate(feature_cols)}
 
-    # Convert cached static features to arrays once
-    static_array_cache = {}
-    for last_date, static_df in static_cache.items():
+    # Convert per-series static frames to arrays
+    static_array_frames = {}
+    for sid, static_df in static_frames.items():
         tmp = static_df.reset_index(drop=True)
         tmp = tmp[[c for c in feature_cols if c in tmp.columns]].copy()
         for c in categorical_cols or []:
@@ -342,12 +356,10 @@ def recursive_forecast_grouped(
         for c in tmp.columns:
             if c in feat_idx:
                 mat[:, feat_idx[c]] = tmp[c].astype(np.float32).values
-        static_array_cache[last_date] = mat
+        static_array_frames[sid] = mat
 
     # Build static matrix aligned with series order
-    static_matrix = np.stack(
-        [static_array_cache[series_data[sid]["last_date"]] for sid in series_ids], axis=0
-    )
+    static_matrix = np.stack([static_array_frames[sid] for sid in series_ids], axis=0)
 
     # Prepare history arrays
     hist_matrix = np.vstack(histories)

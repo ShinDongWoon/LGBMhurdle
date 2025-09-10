@@ -188,6 +188,7 @@ def run_train(cfg: dict):
                     horizon=H,
                     feature_cols=reg_feats,
                     categorical_cols=cat_tr,
+                    embedding_map=embed_map,
                 )
         if skip_fold:
             ids = df_va["id"].unique()

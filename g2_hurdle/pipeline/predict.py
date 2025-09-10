@@ -88,6 +88,7 @@ def run_predict(cfg: dict):
             horizon=H,
             feature_cols=feature_cols,
             categorical_cols=categorical_cols,
+            embedding_map=embedding_map,
         )
         pred_all[test_name] = preds_df
 
