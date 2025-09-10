@@ -39,6 +39,7 @@ def run_predict(cfg: dict):
         train_cfg = art.get("config.json", {})
         if "features" in train_cfg:
             cfg["features"] = train_cfg["features"]
+        embedding_map = art.get("embeddings.json", {})
 
     H = int(cfg.get("cv", {}).get("horizon", 7))
 
@@ -64,7 +65,7 @@ def run_predict(cfg: dict):
 
         # Optionally compute features to ensure column alignment
         schema_use = schema or _schema
-        fe = run_feature_engineering(df, cfg, schema_use)
+        fe, _ = run_feature_engineering(df, cfg, schema_use, embedding_map)
         drop_cols = [
             schema_use["date"],
             schema_use["target"],

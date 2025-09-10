@@ -22,7 +22,7 @@ def test_holiday_features():
     }
     schema = {"date": "date", "target": "y", "series": []}
 
-    result = run_feature_engineering(df, cfg, schema)
+    result, _ = run_feature_engineering(df, cfg, schema)
 
     assert result["is_holiday"].tolist() == [1, 0]
     assert result["holiday_name"].astype(str).tolist() == ["신정", "None"]
