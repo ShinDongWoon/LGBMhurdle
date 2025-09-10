@@ -216,7 +216,7 @@ def recursive_forecast_grouped(
     horizon: int = 7,
     feature_cols=None,
     categorical_cols=None,
-    embedding_map=None,
+    target_encoding_map=None,
 ):
     """Run recursive forecast per series group (identified by schema['series']).
     context_df: must contain at least the last 28 days per series.
@@ -296,11 +296,12 @@ def recursive_forecast_grouped(
             if col in g.columns:
                 val = str(g[col].iloc[0])
                 static_feats[col] = pd.Series([val] * len(static_feats), dtype="category")
-                if embedding_map and col in embedding_map:
-                    emb_vec = embedding_map[col].get(val)
-                    if emb_vec is not None:
-                        for j, e in enumerate(emb_vec):
-                            static_feats[f"{col}_emb_{j}"] = float(e)
+                if target_encoding_map and col in target_encoding_map:
+                    stats = target_encoding_map[col].get(
+                        val, target_encoding_map[col].get("__default__", {})
+                    )
+                    static_feats[f"{col}_te_mean"] = float(stats.get("mean", 0.0))
+                    static_feats[f"{col}_te_std"] = float(stats.get("std", 0.0))
         static_frames[sid] = static_feats
 
         y = g[target_col].astype(np.float32).values

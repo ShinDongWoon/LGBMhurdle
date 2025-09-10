@@ -64,7 +64,7 @@ def run_train(cfg: dict):
     seed = int(cfg.get("runtime", {}).get("seed", 42))
 
     with Timer("Feature engineering"):
-        fe, embed_map = run_feature_engineering(df, cfg, schema)
+        fe, target_encoding_map = run_feature_engineering(df, cfg, schema)
         drop_cols = [
             date_col,
             target_col,
@@ -223,7 +223,7 @@ def run_train(cfg: dict):
                     horizon=H,
                     feature_cols=reg_feats,
                     categorical_cols=cat_tr,
-                    embedding_map=embed_map,
+                    target_encoding_map=target_encoding_map,
                 )
         if skip_fold:
             ids = df_va["id"].unique()
@@ -389,7 +389,7 @@ def run_train(cfg: dict):
         "config.json": cfg,
         "version.txt": f"generated_by=g2_hurdle; folds={folds}",
         "features.json": {"feature_cols": feature_cols, "categorical_cols": categorical_cols},
-        "embeddings.json": embed_map,
+        "target_encoding.json": target_encoding_map,
     }
     save_artifacts(artifacts, artifacts_dir)
     logger.info("Training complete.")
