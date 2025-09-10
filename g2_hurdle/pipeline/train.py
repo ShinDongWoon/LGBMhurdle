@@ -61,8 +61,12 @@ def run_train(cfg: dict):
         drop_cols = [date_col, target_col] + series_cols + ["id"]
         X_all, feature_cols, categorical_cols = prepare_features(fe, drop_cols)
         # ensure calendar components are treated as categorical features
-        base_cats = [c for c in ["dow", "week", "month", "quarter"] if c in X_all.columns]
+        base_cats = [c for c in ["dow", "week", "month", "quarter", "holiday_name"] if c in X_all.columns]
         categorical_cols = sorted(set(categorical_cols).union(base_cats))
+        if "holiday_name" in X_all.columns:
+            assert pd.api.types.is_categorical_dtype(
+                X_all["holiday_name"]
+            ), "holiday_name should be categorical after prepare_features"
         y_all = df[target_col].values
 
     H = int(cfg.get("cv", {}).get("horizon", 7))

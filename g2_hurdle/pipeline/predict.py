@@ -34,7 +34,7 @@ def run_predict(cfg: dict):
         features_meta = art.get("features.json", {})
         feature_cols = features_meta.get("feature_cols", [])
         categorical_cols = features_meta.get("categorical_cols", [])
-        base_cats = ["dow", "week", "month", "quarter"]
+        base_cats = ["dow", "week", "month", "quarter", "holiday_name"]
         categorical_cols = sorted(set(categorical_cols).union(base_cats))
         train_cfg = art.get("config.json", {})
         if "features" in train_cfg:
@@ -71,7 +71,11 @@ def run_predict(cfg: dict):
             *schema_use["series"],
             "id",
         ]
-        prepare_features(fe, drop_cols, feature_cols, categorical_cols)
+        X_test, _, _ = prepare_features(fe, drop_cols, feature_cols, categorical_cols)
+        if "holiday_name" in X_test.columns:
+            assert pd.api.types.is_categorical_dtype(
+                X_test["holiday_name"]
+            ), "holiday_name should be categorical after prepare_features"
 
         preds_df = recursive_forecast_grouped(
             df,
