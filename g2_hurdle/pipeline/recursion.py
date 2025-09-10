@@ -233,7 +233,9 @@ def recursive_forecast_grouped(
     context_df = context_df.copy()
     context_df["_series_id"] = id_series
 
-    # Pre-compute aggregate stats for store_id and menu_id if available
+    # Pre-compute aggregate stats for store_id and menu_id from the supplied
+    # historical context.  These aggregates are fixed during recursion and are
+    # **not** allowed to look ahead into future targets.
     store_stats = None
     menu_stats = None
     if "store_id" in context_df.columns:
