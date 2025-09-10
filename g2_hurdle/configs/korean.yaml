@@ -19,7 +19,8 @@ features:
   fourier: { weekly_K: 3, yearly_K: 10 }
   lags: [1,2,7,14,28,365]
   rollings: [7,14,28]
-  use_holidays: false
+  # Whether to include holiday-based features. Set to false to disable.
+  use_holidays: true
   intermittency: { enable: true }
 
 model:
