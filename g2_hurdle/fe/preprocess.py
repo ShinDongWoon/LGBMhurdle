@@ -49,7 +49,7 @@ def prepare_features(fe_df: pd.DataFrame, drop_cols, feature_cols=None, categori
                 X[c] = (
                     X[c]
                     .astype("category")
-                    .cat.set_categories(cats, inplace=False)
+                    .cat.set_categories(cats)
                     .fillna("missing")
                 )
 
