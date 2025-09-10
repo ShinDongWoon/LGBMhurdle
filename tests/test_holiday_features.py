@@ -1,19 +1,9 @@
 import pandas as pd
-import holidayskr
 from g2_hurdle.fe import run_feature_engineering
 
 
-def test_holiday_features(monkeypatch):
+def test_holiday_features():
     """run_feature_engineering should mark holidays correctly."""
-
-    original_is_holiday = holidayskr.is_holiday
-
-    def _patched(date):
-        if not isinstance(date, str):
-            date = date.strftime("%Y-%m-%d")
-        return original_is_holiday(date)
-
-    monkeypatch.setattr(holidayskr, "is_holiday", _patched)
 
     df = pd.DataFrame(
         {
