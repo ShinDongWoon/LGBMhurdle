@@ -1,60 +1,115 @@
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder
 from typing import Dict, List, Optional
 
 
-def create_embedding_features(
+def create_target_encoding_features(
     df: pd.DataFrame,
     columns: List[str],
+    target_col: str,
+    date_col: str,
     cfg: dict,
-    mapping: Optional[Dict[str, Dict[str, List[float]]]] = None,
+    mapping: Optional[Dict[str, Dict[str, Dict[str, float]]]] = None,
 ):
-    """Create dense embedding features for categorical columns.
+    """Create target-encoding features for categorical columns.
+
+    The encoding is computed in a time-aware manner: for each column a
+    per-category expanding mean and standard deviation of ``target_col`` are
+    calculated using only past observations.  Smoothing based on category
+    frequency is applied to shrink statistics toward the global average.  The
+    resulting features are appended to ``df`` and the fitted mapping of
+    category to statistics is returned so that the same transformation can be
+    reused at inference time.
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input dataframe.
+        Input dataframe sorted by date within each series.
     columns : List[str]
-        Categorical columns to embed.
+        Categorical columns to encode.
+    target_col : str
+        Target column whose statistics are encoded.
+    date_col : str
+        Date column used for deterministic ordering.
     cfg : dict
-        Configuration dictionary. Reads ``features.embeddings.dim`` for
-        dimension and ``runtime.seed`` for reproducibility.
+        Configuration dictionary. Reads ``features.target_encoding.smoothing``
+        for the smoothing strength.
     mapping : dict, optional
-        Existing mapping of {column: {value: embedding_list}} used to transform
-        identifiers consistently. When ``None`` a new mapping is fitted.
+        Existing mapping used to transform identifiers consistently. When
+        ``None`` a new mapping is fitted.
 
     Returns
     -------
     out : pd.DataFrame
-        Dataframe with additional embedding columns appended.
+        Dataframe with additional target encoding columns appended.
     mapping : dict
-        Mapping of identifier to embedding vectors for each column.
+        Mapping of identifier to {"mean", "std"} statistics for each column.
     """
 
-    emb_cfg = cfg.get("features", {}).get("embeddings", {})
-    dim = int(emb_cfg.get("dim", 8))
-    seed = int(cfg.get("runtime", {}).get("seed", 42))
-    rng = np.random.default_rng(seed)
-    mapping = {} if mapping is None else {k: dict(v) for k, v in mapping.items()}
+    te_cfg = cfg.get("features", {}).get("target_encoding", {})
+    smoothing = float(te_cfg.get("smoothing", 10.0))
 
     out = df.copy()
+    mapping = {} if mapping is None else {k: dict(v) for k, v in mapping.items()}
+
+    # Global statistics used for smoothing and unseen categories
+    global_mean = float(df[target_col].mean())
+    global_std = float(df[target_col].std(ddof=0))
+
+    # Work on sorted copy to ensure time-aware encoding but keep original order
+    sorted_out = out.sort_values(date_col).reset_index()
+
     for col in columns:
         if col not in out.columns:
             continue
-        series = out[col].astype(str)
+
         if col in mapping:
             col_map = mapping[col]
-            d = len(next(iter(col_map.values()))) if col_map else dim
-            arr = np.vstack([col_map.get(val, np.zeros(d)) for val in series])
+            default = col_map.get("__default__", {"mean": global_mean, "std": global_std})
+            means, stds = [], []
+            for val in sorted_out[col].astype(str):
+                stats = col_map.get(val, default)
+                means.append(stats.get("mean", default["mean"]))
+                stds.append(stats.get("std", default["std"]))
         else:
-            le = LabelEncoder()
-            codes = le.fit_transform(series)
-            emb_matrix = rng.standard_normal((len(le.classes_), dim))
-            col_map = {cls: emb_matrix[i].tolist() for i, cls in enumerate(le.classes_)}
+            means, stds = [], []
+            stats = {}  # value -> (count, mean, M2)
+            for val, y in zip(sorted_out[col].astype(str), sorted_out[target_col]):
+                count, mean, M2 = stats.get(val, (0, 0.0, 0.0))
+                if count > 0:
+                    cat_mean = mean
+                    cat_std = np.sqrt(M2 / count) if count > 1 else 0.0
+                    w = count / (count + smoothing)
+                    enc_mean = w * cat_mean + (1 - w) * global_mean
+                    enc_std = w * cat_std + (1 - w) * global_std
+                else:
+                    enc_mean = global_mean
+                    enc_std = global_std
+                means.append(enc_mean)
+                stds.append(enc_std)
+
+                # Update running stats
+                count += 1
+                delta = y - mean
+                mean += delta / count
+                M2 += delta * (y - mean)
+                stats[val] = (count, mean, M2)
+
+            # Build mapping for inference
+            col_map = {}
+            for val, (count, mean, M2) in stats.items():
+                cat_std = np.sqrt(M2 / count) if count > 1 else 0.0
+                w = count / (count + smoothing)
+                enc_mean = w * mean + (1 - w) * global_mean
+                enc_std = w * cat_std + (1 - w) * global_std
+                col_map[val] = {"mean": float(enc_mean), "std": float(enc_std)}
+            col_map["__default__"] = {"mean": global_mean, "std": global_std}
             mapping[col] = col_map
-            arr = emb_matrix[codes]
-        for j in range(arr.shape[1]):
-            out[f"{col}_emb_{j}"] = arr[:, j]
+
+        sorted_out[f"{col}_te_mean"] = means
+        sorted_out[f"{col}_te_std"] = stds
+
+    # Restore original ordering
+    out = sorted_out.set_index("index").sort_index()
+
     return out, mapping
