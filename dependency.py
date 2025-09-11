@@ -12,7 +12,7 @@ REQUIRED_PACKAGES = [
     "tslearn",
     "cupy",
     "cuml",
-    "dtaidistance[cuda]",
+    "dtaidistance",
 ]
 
 def install_missing_packages(packages):
