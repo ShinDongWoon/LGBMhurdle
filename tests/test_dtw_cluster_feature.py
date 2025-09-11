@@ -13,9 +13,9 @@ def test_dtw_cluster_feature():
     )
     cfg = {
         "features": {
-            "dtw": {"enable": True, "n_clusters": 2, "use_gpu": False},
+            "dtw": {"enable": True, "n_clusters": 1, "use_gpu": False},
             "lags": [],
-            "rollings": [],
+            "rollings": [7],
             "fourier": {"weekly_K": 0, "yearly_K": 0},
             "intermittency": {"enable": False},
             "use_holidays": False,
@@ -28,6 +28,18 @@ def test_dtw_cluster_feature():
     assert "demand_cluster" in out.columns
     assert pd.api.types.is_categorical_dtype(out["demand_cluster"])
     assert set(extras["dtw_clusters"].keys()) == set(df["store_menu_id"].unique())
+    assert "demand_vs_cluster_mean" in out.columns
+    exp = out.groupby(["demand_cluster", "date"], observed=False)["roll_mean_7"].transform("mean")
+    pd.testing.assert_series_equal(
+        out["demand_vs_cluster_mean"],
+        out["roll_mean_7"] - exp,
+        check_names=False,
+        check_dtype=False,
+    )
+    assert "demand_cluster_te_mean" in out.columns
+    assert "demand_cluster_te_std" in out.columns
+    assert "target_encoding" in extras
+    assert "demand_cluster" in extras["target_encoding"]
 
 
 def test_dtw_cluster_train_only():
