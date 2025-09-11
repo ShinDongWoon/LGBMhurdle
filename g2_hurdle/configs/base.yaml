@@ -23,7 +23,7 @@ features:
   use_holidays: true
   intermittency: { enable: true }
   dtw:
-    enable: true
+    enable: false
     n_clusters: 2
     use_gpu: false
 
