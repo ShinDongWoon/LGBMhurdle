@@ -7,8 +7,13 @@ from ..utils.logging import get_logger
 logger = get_logger("DTWCluster")
 
 
-def compute_dtw_clusters(df: pd.DataFrame, schema: dict, n_clusters: int = 20, use_gpu: bool = True):
+def compute_dtw_clusters(
+    df: pd.DataFrame, schema: dict, n_clusters: int = 20, use_gpu: bool = False
+):
     """Cluster demand series using Dynamic Time Warping distances.
+
+    Computation relies on optimized CPU routines; GPU acceleration is not
+    available.
 
     Parameters
     ----------
@@ -18,9 +23,9 @@ def compute_dtw_clusters(df: pd.DataFrame, schema: dict, n_clusters: int = 20, u
         Schema mapping with keys ``date`` and ``target``.
     n_clusters : int, default 20
         Number of clusters to form.
-    use_gpu : bool, default True
-        Whether to attempt GPU-accelerated computation. Falls back to CPU
-        implementations if GPU libraries are unavailable.
+    use_gpu : bool, default False
+        Retained for compatibility. If ``True``, a warning is logged and CPU
+        computation is used.
 
     Returns
     -------
@@ -45,86 +50,49 @@ def compute_dtw_clusters(df: pd.DataFrame, schema: dict, n_clusters: int = 20, u
         .sort_index(axis=1)
     )
     series_ids = pivot.index.tolist()
-    data = pivot.values.astype("float32")
+    data = pivot.values.astype("float64")
 
     n_clusters = int(min(max(1, n_clusters), len(series_ids)))
 
-    distance_matrix = None
     if use_gpu:
-        try:  # pragma: no cover - GPU path isn't exercised in tests
-            import cupy as cp
-        except Exception:
-            pass
-        else:
-            try:
-                from dtaidistance import dtw_cuda
-            except ImportError:
-                logger.warning("dtaidistance CUDA extension not installed; falling back to CPU DTW.")
-            else:
-                try:
-                    distance_matrix = dtw_cuda.distance_matrix(data, compact=False)
-                    distance_matrix = cp.asarray(distance_matrix)
-                except RuntimeError as e:
-                    logger.warning("dtaidistance distance computation failed: %s; falling back to CPU DTW.", e)
-                    distance_matrix = None
-                except Exception:
-                    raise
+        logger.warning(
+            "GPU acceleration requested but not available; using CPU routines."
+        )
 
-    if distance_matrix is None:
-        from tslearn.metrics import cdist_dtw
+    from dtaidistance import dtw
 
-        distance_matrix = cdist_dtw(data)
+    distance_matrix = dtw.distance_matrix_fast(
+        data, compact=False, parallel=True
+    )
 
-    labels = None
-    if use_gpu and "cp" in locals():
-        try:  # pragma: no cover
-            from cuml.cluster import KMedoids as cuKMedoids
-        except ImportError:
-            logger.warning("cuml not installed; falling back to CPU KMedoids.")
-        else:
-            try:
-                km = cuKMedoids(
-                    n_clusters=n_clusters, metric="precomputed", random_state=0
-                )
-                labels = km.fit_predict(cp.asarray(distance_matrix))
-                labels = labels.get()
-            except RuntimeError as e:
-                logger.warning(
-                    "cuml KMedoids failed: %s; falling back to CPU KMedoids.", e
-                )
-                labels = None
-            except Exception:
-                raise
+    try:
+        from sklearn_extra.cluster import KMedoids
 
-    if labels is None:
-        try:
-            from sklearn_extra.cluster import KMedoids
-
-            km = KMedoids(
-                n_clusters=n_clusters, metric="precomputed", random_state=0
-            )
-            km.fit(distance_matrix)
-            labels = km.labels_
-        except Exception:
-            rng = np.random.default_rng(0)
-            n = distance_matrix.shape[0]
-            medoids = rng.choice(n, size=n_clusters, replace=False)
-            for _ in range(300):
-                labels = np.argmin(distance_matrix[:, medoids], axis=1)
-                new_medoids = []
-                for k in range(n_clusters):
-                    cluster_idx = np.where(labels == k)[0]
-                    if len(cluster_idx) == 0:
-                        new_medoids.append(medoids[k])
-                        continue
-                    intra = distance_matrix[np.ix_(cluster_idx, cluster_idx)]
-                    costs = intra.sum(axis=1)
-                    new_medoids.append(cluster_idx[np.argmin(costs)])
-                new_medoids = np.array(new_medoids)
-                if np.all(new_medoids == medoids):
-                    break
-                medoids = new_medoids
+        km = KMedoids(
+            n_clusters=n_clusters, metric="precomputed", random_state=0
+        )
+        km.fit(distance_matrix)
+        labels = km.labels_
+    except Exception:
+        rng = np.random.default_rng(0)
+        n = distance_matrix.shape[0]
+        medoids = rng.choice(n, size=n_clusters, replace=False)
+        for _ in range(300):
             labels = np.argmin(distance_matrix[:, medoids], axis=1)
+            new_medoids = []
+            for k in range(n_clusters):
+                cluster_idx = np.where(labels == k)[0]
+                if len(cluster_idx) == 0:
+                    new_medoids.append(medoids[k])
+                    continue
+                intra = distance_matrix[np.ix_(cluster_idx, cluster_idx)]
+                costs = intra.sum(axis=1)
+                new_medoids.append(cluster_idx[np.argmin(costs)])
+            new_medoids = np.array(new_medoids)
+            if np.all(new_medoids == medoids):
+                break
+            medoids = new_medoids
+        labels = np.argmin(distance_matrix[:, medoids], axis=1)
 
     labels = [int(x) for x in labels]
     clusters = dict(zip(series_ids, labels))
