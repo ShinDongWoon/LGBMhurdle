@@ -32,6 +32,8 @@ def create_lags_and_rolling_features(df: pd.DataFrame, target_col: str, series_c
             if w not in (7, 14):
                 group[f"roll_mean_{w}"] = r.mean()
             group[f"roll_std_{w}"] = r.std()
+            group[f"roll_min_{w}"] = r.min()
+            group[f"roll_max_{w}"] = r.max()
         for c in group.select_dtypes(include="category").columns:
             if 0 not in group[c].cat.categories:
                 group[c] = group[c].cat.add_categories([0])
@@ -110,6 +112,8 @@ def update_lags_and_rollings(ctx_tail: pd.DataFrame, new_y: float, cfg: dict) ->
         if w not in (7, 14):
             new_row[f"roll_mean_{w}"] = hist.mean()
         new_row[f"roll_std_{w}"] = hist.std()
+        new_row[f"roll_min_{w}"] = hist.min()
+        new_row[f"roll_max_{w}"] = hist.max()
 
     # future target is unknown
     new_row[target_col] = np.nan
