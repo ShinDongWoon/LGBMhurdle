@@ -45,6 +45,7 @@ def compute_dtw_clusters(
             columns=date_col,
             values=target_col,
             fill_value=0,
+            observed=False,
         )
         .sort_index()
         .sort_index(axis=1)
