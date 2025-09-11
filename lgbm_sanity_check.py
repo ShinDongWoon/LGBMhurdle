@@ -18,7 +18,7 @@ def parse_args():
     ap = argparse.ArgumentParser()
     ap.add_argument("--csv", type=str, required=True)
     ap.add_argument("--date_col", type=str, default="영업일자")
-    ap.add_argument("--key_col", type=str, default="영업장명_메뉴명")
+    ap.add_argument("--key_col", type=str, default="store_menu_id")
     ap.add_argument("--target_col", type=str, default="매출수량")
     ap.add_argument("--nrows", type=int, default=None, help="디버깅을 위해 일부만 읽고 싶다면 지정")
     ap.add_argument("--valid_days", type=int, default=28, help="검증 기간(일)")
