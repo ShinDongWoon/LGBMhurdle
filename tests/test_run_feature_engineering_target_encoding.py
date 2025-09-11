@@ -12,6 +12,7 @@ def test_run_feature_engineering_adds_target_encoding():
         "y": [1, 0, 2, 1],
         "store_id": ["s1", "s1", "s2", "s2"],
         "menu_id": ["m1", "m2", "m1", "m3"],
+        "store_menu_id": ["s1_m1", "s1_m2", "s2_m1", "s2_m3"],
     })
     cfg = {
         "features": {
@@ -23,9 +24,15 @@ def test_run_feature_engineering_adds_target_encoding():
             "target_encoding": {"smoothing": 0},
         }
     }
-    schema = {"date": "d", "target": "y", "series": ["store_id", "menu_id"]}
+    schema = {
+        "date": "d",
+        "target": "y",
+        "series": ["store_id", "menu_id", "store_menu_id"],
+    }
     result, mapping = run_feature_engineering(df, cfg, schema)
     assert "store_id_te_mean" in result.columns
     assert "menu_id_te_mean" in result.columns
+    assert "store_menu_id_te_mean" in result.columns
     assert "store_id" in mapping
     assert "menu_id" in mapping
+    assert "store_menu_id" in mapping
