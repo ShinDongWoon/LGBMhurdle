@@ -136,7 +136,10 @@ def run_train(cfg: dict):
         fe_fold["demand_cluster"] = fe_fold["store_menu_id"].map(clusters)
         feat_cols_fold = feature_cols + ["demand_cluster"]
         cat_cols_fold = categorical_cols + ["demand_cluster"]
-        categories_fold = {**categories_map, "demand_cluster": sorted(set(clusters.values()))}
+        categories_fold = {
+            **categories_map,
+            "demand_cluster": sorted(set(clusters.values())) + ["missing"],
+        }
         X_fold, _, _ = prepare_features(
             fe_fold,
             drop_cols,
@@ -346,7 +349,7 @@ def run_train(cfg: dict):
         categorical_cols_full = categorical_cols + ["demand_cluster"]
         categories_map = {
             **categories_map,
-            "demand_cluster": sorted(set(clusters_all.values())),
+            "demand_cluster": sorted(set(clusters_all.values())) + ["missing"],
         }
         X_all, feature_cols, categorical_cols = prepare_features(
             fe_full,
