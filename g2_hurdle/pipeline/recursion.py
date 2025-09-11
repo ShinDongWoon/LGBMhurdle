@@ -217,7 +217,13 @@ def recursive_forecast_grouped(
 
     # Ensure series id
     from ..utils.keys import build_series_id, ensure_wide_columns
-    id_series = build_series_id(context_df, series_cols)
+
+    # Use existing "id" column when provided for backward compatibility
+    if "id" in context_df.columns:
+        id_series = context_df["id"].astype(str)
+    else:
+        id_series = build_series_id(context_df, series_cols)
+
     context_df = context_df.copy()
     context_df["_series_id"] = id_series
 

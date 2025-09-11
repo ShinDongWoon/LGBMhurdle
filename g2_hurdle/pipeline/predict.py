@@ -8,7 +8,6 @@ from ..utils.logging import get_logger
 from ..utils.timer import Timer
 from ..utils.io import load_artifacts, load_data
 from ..utils.keys import (
-    build_series_id,
     align_to_submission,
     ensure_wide_columns,
     normalize_series_name,
@@ -63,7 +62,7 @@ def run_predict(cfg: dict):
             {"data": {"date_col_candidates": [schema.get("date")], "target_col_candidates": [schema.get("target")], "id_col_candidates": schema.get("series", [])}} if schema else cfg,
         )
         # ensure id
-        df["id"] = build_series_id(df, (schema or _schema)["series"])
+        df["id"] = normalize_series_name(df["store_menu_id"])
         if cfg.get("features", {}).get("dtw", {}).get("enable") and dtw_clusters:
             df["demand_cluster"] = (
                 df["store_menu_id"].map(dtw_clusters).astype("category")
