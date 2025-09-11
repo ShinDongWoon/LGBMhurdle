@@ -57,17 +57,15 @@ def compute_dtw_clusters(df: pd.DataFrame, schema: dict, n_clusters: int = 20, u
             pass
         else:
             try:
-                from cudtw import distance_matrix as cudtw_distance_matrix
+                from dtaidistance import dtw_cuda
             except ImportError:
-                logger.warning("cudtw not installed; falling back to CPU DTW.")
+                logger.warning("dtaidistance CUDA extension not installed; falling back to CPU DTW.")
             else:
                 try:
-                    distance_matrix = cudtw_distance_matrix(cp.asarray(data))
+                    distance_matrix = dtw_cuda.distance_matrix(data, compact=False)
+                    distance_matrix = cp.asarray(distance_matrix)
                 except RuntimeError as e:
-                    logger.warning(
-                        "cudtw distance computation failed: %s; falling back to CPU DTW.",
-                        e,
-                    )
+                    logger.warning("dtaidistance distance computation failed: %s; falling back to CPU DTW.", e)
                     distance_matrix = None
                 except Exception:
                     raise
