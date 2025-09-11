@@ -1,5 +1,6 @@
 
 import os
+import copy
 import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
@@ -9,7 +10,7 @@ from ..utils.timer import Timer
 from ..utils.io import load_data, save_artifacts
 from ..utils.keys import normalize_series_name
 from ..utils.preprocessing import ensure_min_positive_ratio
-from ..fe import run_feature_engineering, prepare_features
+from ..fe import run_feature_engineering, prepare_features, compute_dtw_clusters
 from ..cv.tscv import rolling_forecast_origin_split
 from ..model.classifier import HurdleClassifier
 from ..model.regressor import HurdleRegressor
@@ -66,7 +67,10 @@ def run_train(cfg: dict):
     seed = int(cfg.get("runtime", {}).get("seed", 42))
 
     with Timer("Feature engineering"):
-        fe, extras = run_feature_engineering(df, cfg, schema)
+        cfg_copy = copy.deepcopy(cfg)
+        if cfg_copy.get("features", {}).get("dtw"):
+            cfg_copy.setdefault("features", {}).setdefault("dtw", {})["enable"] = False
+        fe_base, _ = run_feature_engineering(df, cfg_copy, schema)
         drop_cols = [
             date_col,
             target_col,
@@ -82,9 +86,9 @@ def run_train(cfg: dict):
                 "store_menu_id",
                 "demand_cluster",
             ]
-            if c in fe.columns
+            if c in fe_base.columns
         ]
-        X_all, feature_cols, categorical_cols = prepare_features(fe, drop_cols)
+        X_all, feature_cols, categorical_cols = prepare_features(fe_base, drop_cols)
         categorical_cols = sorted(set(categorical_cols).union(base_cats))
         if "holiday_name" in X_all.columns:
             assert pd.api.types.is_categorical_dtype(
@@ -123,10 +127,28 @@ def run_train(cfg: dict):
         df_va = df.loc[va_mask].copy()
         tr_inner, va_inner = _split_train_valid_by_tail_dates(df_tr, date_col, ratio_tail=28)
 
-        X_tr = X_all.loc[tr_inner.index, feature_cols].copy()
+        dtw_cfg = cfg.get("features", {}).get("dtw", {})
+        n_clusters = int(dtw_cfg.get("n_clusters", 20))
+        use_gpu = bool(dtw_cfg.get("use_gpu", True))
+        clusters = compute_dtw_clusters(df_tr, schema, n_clusters, use_gpu)
+
+        fe_fold = fe_base.loc[tr_mask | va_mask].copy()
+        fe_fold["demand_cluster"] = fe_fold["store_menu_id"].map(clusters)
+        feat_cols_fold = feature_cols + ["demand_cluster"]
+        cat_cols_fold = categorical_cols + ["demand_cluster"]
+        categories_fold = {**categories_map, "demand_cluster": sorted(set(clusters.values()))}
+        X_fold, _, _ = prepare_features(
+            fe_fold,
+            drop_cols,
+            feat_cols_fold,
+            cat_cols_fold,
+            categories_fold,
+        )
+
+        X_tr = X_fold.loc[tr_inner.index, feat_cols_fold].copy()
         y_tr = tr_inner[target_col].values
         if va_inner is not None:
-            X_val = X_all.loc[va_inner.index, feature_cols].copy()
+            X_val = X_fold.loc[va_inner.index, feat_cols_fold].copy()
             y_val = va_inner[target_col].values
         else:
             X_val, y_val = None, None
@@ -149,13 +171,13 @@ def run_train(cfg: dict):
 
         preds_df = None
         if not skip_fold:
-            drop_cols_tr = [c for c in feature_cols if X_tr[c].nunique(dropna=True) <= 1]
+            drop_cols_tr = [c for c in feat_cols_fold if X_tr[c].nunique(dropna=True) <= 1]
             if drop_cols_tr:
                 X_tr = X_tr.drop(columns=drop_cols_tr)
                 if X_val is not None:
                     X_val = X_val.drop(columns=drop_cols_tr, errors="ignore")
-            feature_cols_tr = [c for c in feature_cols if c not in drop_cols_tr]
-            categorical_cols_tr = [c for c in categorical_cols if c not in drop_cols_tr]
+            feature_cols_tr = [c for c in feat_cols_fold if c not in drop_cols_tr]
+            categorical_cols_tr = [c for c in cat_cols_fold if c not in drop_cols_tr]
             if not feature_cols_tr:
                 skip_fold = True
                 logger.warning(
@@ -173,13 +195,13 @@ def run_train(cfg: dict):
                         min_pos_ratio,
                         seed=seed,
                         categorical_cols=categorical_cols_tr,
-                        categories_map=categories_map,
+                        categories_map=categories_fold,
                         use_weights=use_weights,
                     )
                     if X_val is not None:
                         for c in categorical_cols_tr:
                             if c in X_val.columns:
-                                cats = categories_map.get(c) if categories_map else None
+                                cats = categories_fold.get(c) if categories_fold else None
                                 X_val[c] = (
                                     pd.Categorical(X_val[c], categories=cats)
                                     if cats
@@ -245,6 +267,7 @@ def run_train(cfg: dict):
                 from .recursion import recursive_forecast_grouped
                 # Use context: all rows up to tr_end per series
                 context = df[df[date_col] <= tr_end].copy()
+                context["demand_cluster"] = context["store_menu_id"].map(clusters)
                 preds_df = recursive_forecast_grouped(
                     context,
                     schema,
@@ -311,6 +334,27 @@ def run_train(cfg: dict):
         q_all_arr = np.asarray(q_all, dtype=float)
         t_star, score = find_optimal_threshold(y_true_all_arr, p_all_arr, q_all_arr, cfg)
         logger.info(f"Optimal threshold={t_star:.3f}, CV wSMAPE≈{score:.3f}")
+    dtw_cfg = cfg.get("features", {}).get("dtw", {})
+    clusters_all = None
+    if dtw_cfg.get("enable"):
+        n_clusters = int(dtw_cfg.get("n_clusters", 20))
+        use_gpu = bool(dtw_cfg.get("use_gpu", True))
+        clusters_all = compute_dtw_clusters(df, schema, n_clusters, use_gpu)
+        fe_full = fe_base.copy()
+        fe_full["demand_cluster"] = fe_full["store_menu_id"].map(clusters_all)
+        feature_cols_full = feature_cols + ["demand_cluster"]
+        categorical_cols_full = categorical_cols + ["demand_cluster"]
+        categories_map = {
+            **categories_map,
+            "demand_cluster": sorted(set(clusters_all.values())),
+        }
+        X_all, feature_cols, categorical_cols = prepare_features(
+            fe_full,
+            drop_cols,
+            feature_cols_full,
+            categorical_cols_full,
+            categories_map,
+        )
 
     # Retrain on full data
     # Repeat variance check on full dataset
@@ -416,7 +460,7 @@ def run_train(cfg: dict):
             "categories": categories_map,
         },
     }
-    if extras.get("dtw_clusters") is not None:
-        artifacts["dtw_clusters.json"] = extras["dtw_clusters"]
+    if clusters_all is not None:
+        artifacts["dtw_clusters.json"] = clusters_all
     save_artifacts(artifacts, artifacts_dir)
     logger.info("Training complete.")

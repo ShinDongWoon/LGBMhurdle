@@ -66,7 +66,7 @@ def run_predict(cfg: dict):
         _schema["series"] = ["store_menu_id"]
         # ensure id
         df["id"] = normalize_series_name(df["store_menu_id"])
-        if cfg.get("features", {}).get("dtw", {}).get("enable") and dtw_clusters:
+        if dtw_clusters:
             df["demand_cluster"] = (
                 df["store_menu_id"].map(dtw_clusters).astype("category")
             )
