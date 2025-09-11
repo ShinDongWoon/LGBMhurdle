@@ -46,7 +46,6 @@ def run_predict(cfg: dict):
         train_cfg = art.get("config.json", {})
         if "features" in train_cfg:
             cfg["features"] = train_cfg["features"]
-        target_encoding_map = art.get("target_encoding.json", {})
 
     H = int(cfg.get("cv", {}).get("horizon", 7))
 
@@ -72,7 +71,7 @@ def run_predict(cfg: dict):
 
         # Optionally compute features to ensure column alignment
         schema_use = schema or _schema
-        fe, _ = run_feature_engineering(df, cfg, schema_use, target_encoding_map)
+        fe, _ = run_feature_engineering(df, cfg, schema_use)
         drop_cols = [
             schema_use["date"],
             schema_use["target"],
@@ -101,7 +100,6 @@ def run_predict(cfg: dict):
             horizon=H,
             feature_cols=feature_cols,
             categorical_cols=categorical_cols,
-            target_encoding_map=target_encoding_map,
         )
         pred_all[test_name] = preds_df
 
