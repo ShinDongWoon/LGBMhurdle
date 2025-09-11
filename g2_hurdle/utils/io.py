@@ -7,6 +7,11 @@ logger = get_logger("IO")
 
 def load_data(path: str, cfg: dict):
     df = pd.read_csv(path)
+    combined_col = "영업장명_메뉴명"
+    if combined_col in df.columns:
+        splits = df[combined_col].astype(str).str.split("_", n=1, expand=True)
+        df["store_id"] = splits[0]
+        df["menu_id"] = splits[1]
     schema = resolve_schema(df.columns.tolist(), cfg)
     date_col = schema["date"]
     target_col = schema["target"]
