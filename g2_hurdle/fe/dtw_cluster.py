@@ -1,6 +1,11 @@
 import numpy as np
 import pandas as pd
 
+from ..utils.logging import get_logger
+
+
+logger = get_logger("DTWCluster")
+
 
 def compute_dtw_clusters(df: pd.DataFrame, schema: dict, n_clusters: int = 20, use_gpu: bool = True):
     """Cluster demand series using Dynamic Time Warping distances.
@@ -48,14 +53,24 @@ def compute_dtw_clusters(df: pd.DataFrame, schema: dict, n_clusters: int = 20, u
     if use_gpu:
         try:  # pragma: no cover - GPU path isn't exercised in tests
             import cupy as cp
+        except Exception:
+            pass
+        else:
             try:
                 from cudtw import distance_matrix as cudtw_distance_matrix
-
-                distance_matrix = cudtw_distance_matrix(cp.asarray(data))
-            except Exception:  # fall back to CPU DTW
-                distance_matrix = None
-        except Exception:
-            distance_matrix = None
+            except ImportError:
+                logger.warning("cudtw not installed; falling back to CPU DTW.")
+            else:
+                try:
+                    distance_matrix = cudtw_distance_matrix(cp.asarray(data))
+                except RuntimeError as e:
+                    logger.warning(
+                        "cudtw distance computation failed: %s; falling back to CPU DTW.",
+                        e,
+                    )
+                    distance_matrix = None
+                except Exception:
+                    raise
 
     if distance_matrix is None:
         from tslearn.metrics import cdist_dtw
@@ -63,17 +78,25 @@ def compute_dtw_clusters(df: pd.DataFrame, schema: dict, n_clusters: int = 20, u
         distance_matrix = cdist_dtw(data)
 
     labels = None
-    if use_gpu:
+    if use_gpu and "cp" in locals():
         try:  # pragma: no cover
             from cuml.cluster import KMedoids as cuKMedoids
-
-            km = cuKMedoids(
-                n_clusters=n_clusters, metric="precomputed", random_state=0
-            )
-            labels = km.fit_predict(cp.asarray(distance_matrix))
-            labels = labels.get()
-        except Exception:
-            labels = None
+        except ImportError:
+            logger.warning("cuml not installed; falling back to CPU KMedoids.")
+        else:
+            try:
+                km = cuKMedoids(
+                    n_clusters=n_clusters, metric="precomputed", random_state=0
+                )
+                labels = km.fit_predict(cp.asarray(distance_matrix))
+                labels = labels.get()
+            except RuntimeError as e:
+                logger.warning(
+                    "cuml KMedoids failed: %s; falling back to CPU KMedoids.", e
+                )
+                labels = None
+            except Exception:
+                raise
 
     if labels is None:
         try:
