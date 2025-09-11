@@ -79,6 +79,8 @@ def _compute_dynamic_features(
     roll_steps,
     roll_mean_idx,
     roll_std_idx,
+    roll_min_idx,
+    roll_max_idx,
     dsls_idx,
     rzero_idx,
     avg_idi_idx,
@@ -97,10 +99,16 @@ def _compute_dynamic_features(
             start = tail_len - w
             s = 0.0
             ss = 0.0
+            mn = np.inf
+            mx = -np.inf
             for j in range(start, tail_len):
                 v = hist_matrix[i, j]
                 s += v
                 ss += v * v
+                if v < mn:
+                    mn = v
+                if v > mx:
+                    mx = v
             mean = s / w
             if roll_mean_idx[k] >= 0 and w not in (7, 14):
                 out[i, roll_mean_idx[k]] = mean
@@ -110,6 +118,10 @@ def _compute_dynamic_features(
                     out[i, roll_std_idx[k]] = np.sqrt(var)
                 else:
                     out[i, roll_std_idx[k]] = 0.0
+            if roll_min_idx[k] >= 0:
+                out[i, roll_min_idx[k]] = mn
+            if roll_max_idx[k] >= 0:
+                out[i, roll_max_idx[k]] = mx
 
         # intermittency-related features
         if dsls_idx >= 0:
@@ -186,6 +198,8 @@ def _build_dynamic_row(
         if w not in (7, 14):
             row[f"roll_mean_{w}"] = float(window.mean())
         row[f"roll_std_{w}"] = float(window.std(ddof=1))
+        row[f"roll_min_{w}"] = float(window.min())
+        row[f"roll_max_{w}"] = float(window.max())
     if dsls_hist is not None:
         dsls = dsls_hist[-1]
         row["days_since_last_sale"] = float(dsls)
@@ -342,6 +356,12 @@ def recursive_forecast_grouped(
     roll_std_idx = np.array(
         [feat_idx.get(f"roll_std_{w}", -1) for w in rolls], dtype=np.int64
     )
+    roll_min_idx = np.array(
+        [feat_idx.get(f"roll_min_{w}", -1) for w in rolls], dtype=np.int64
+    )
+    roll_max_idx = np.array(
+        [feat_idx.get(f"roll_max_{w}", -1) for w in rolls], dtype=np.int64
+    )
     dsls_idx = feat_idx.get("days_since_last_sale", -1)
     rzero_idx = feat_idx.get("rolling_zero_count_7d", -1)
     avg_idi_idx = feat_idx.get("avg_interdemand_interval", -1)
@@ -360,6 +380,8 @@ def recursive_forecast_grouped(
             roll_steps,
             roll_mean_idx,
             roll_std_idx,
+            roll_min_idx,
+            roll_max_idx,
             dsls_idx,
             rzero_idx,
             avg_idi_idx,
