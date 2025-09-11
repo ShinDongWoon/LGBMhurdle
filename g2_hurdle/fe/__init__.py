@@ -1,4 +1,3 @@
-
 import pandas as pd
 from .calendar import create_calendar_features
 from .fourier import create_fourier_features
@@ -7,6 +6,7 @@ from .lags_rolling import create_lags_and_rolling_features
 from .intermittency import create_intermittency_features
 from .preprocess import prepare_features
 from .dtw_cluster import compute_dtw_clusters
+from .relational import create_relational_features
 
 
 def run_feature_engineering(
@@ -30,13 +30,10 @@ def run_feature_engineering(
             clusters = (
                 out[["store_menu_id", "demand_cluster"]]
                 .drop_duplicates()
-                .set_index("store_menu_id")
-                ["demand_cluster"]
+                .set_index("store_menu_id")["demand_cluster"]
                 .to_dict()
             )
-        out["demand_cluster"] = (
-            out["store_menu_id"].map(clusters).astype("category")
-        )
+        out["demand_cluster"] = out["store_menu_id"].map(clusters).astype("category")
         extras["dtw_clusters"] = clusters
 
     out = create_calendar_features(out, date_col)
@@ -51,4 +48,7 @@ def run_feature_engineering(
     out = create_lags_and_rolling_features(out, target_col, series_cols, cfg)
     if cfg.get("features", {}).get("intermittency", {}).get("enable", True):
         out = create_intermittency_features(out, target_col, series_cols)
+    out = create_relational_features(out, schema)
+    # store_id and menu_id are only needed for feature construction
+    out = out.drop(columns=[c for c in ["store_id", "menu_id"] if c in out.columns])
     return out, extras
