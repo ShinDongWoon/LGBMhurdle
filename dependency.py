@@ -12,6 +12,7 @@ REQUIRED_PACKAGES = [
     "tslearn",
     "cupy-cuda11x",
     "cuml",
+    "cudtw",
 ]
 
 def install_missing_packages(packages):
