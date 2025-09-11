@@ -30,6 +30,9 @@ def ensure_min_positive_ratio(
     Tuple[pd.DataFrame, np.ndarray]
         Augmented ``X`` and ``y`` with additional positive samples if needed.
     """
+    # Preserve original categorical columns to restore dtypes after augmentation
+    cat_cols = X.select_dtypes(include="category").columns
+
     if min_ratio <= 0:
         return X, y
 
@@ -56,4 +59,9 @@ def ensure_min_positive_ratio(
     y_extra = y[extra_indices]
     X_aug = pd.concat([X, X_extra], ignore_index=True)
     y_aug = np.concatenate([y, y_extra])
+
+    # Restore categorical dtypes using original category definitions
+    for c in cat_cols:
+        X_aug[c] = pd.Categorical(X_aug[c], categories=X[c].cat.categories)
+
     return X_aug, y_aug

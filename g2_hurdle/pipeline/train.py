@@ -184,6 +184,10 @@ def run_train(cfg: dict):
 
                 if min_pos_ratio > 0:
                     X_tr, y_tr = ensure_min_positive_ratio(X_tr, y_tr, min_pos_ratio, seed=seed)
+                    # Verify categorical dtypes are preserved after resampling
+                    for col in ["store_id", "menu_id"]:
+                        if col in X_tr.columns:
+                            logger.debug(f"{col} dtype after ensure_min_positive_ratio: {X_tr[col].dtype}")
 
                 cat_tr = [c for c in categorical_cols_tr if c in X_tr.columns]
                 cls_params = dict(cfg.get("model", {}).get("classifier", {}))
