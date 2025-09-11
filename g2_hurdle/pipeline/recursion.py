@@ -225,7 +225,11 @@ def recursive_forecast_grouped(
     drop_cols = [
         date_col,
         target_col,
-        *[c for c in series_cols if c not in ("store_id", "menu_id")],
+        *[
+            c
+            for c in series_cols
+            if c not in ("store_id", "menu_id", "store_menu_id")
+        ],
     ]
     lags = cfg.get("features", {}).get("lags", [1, 7, 28, 365])
     lags = [l for l in lags if l not in (2, 14)]
@@ -251,10 +255,12 @@ def recursive_forecast_grouped(
             base_static = prepare_static_future_features(g, schema, cfg, H)
             static_cache[last_date] = base_static
         static_feats = base_static.copy()
-        for col in ("store_id", "menu_id"):
+        for col in ("store_id", "menu_id", "store_menu_id"):
             if col in g.columns:
                 val = str(g[col].iloc[0])
-                static_feats[col] = pd.Series([val] * len(static_feats), dtype="category")
+                static_feats[col] = pd.Series(
+                    [val] * len(static_feats), dtype="category"
+                )
                 if target_encoding_map and col in target_encoding_map:
                     stats = target_encoding_map[col].get(
                         val, target_encoding_map[col].get("__default__", {})

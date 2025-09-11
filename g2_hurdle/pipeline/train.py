@@ -70,11 +70,24 @@ def run_train(cfg: dict):
             date_col,
             target_col,
             "id",
-            *[c for c in series_cols if c not in ("store_id", "menu_id")],
+            *[
+                c
+                for c in series_cols
+                if c not in ("store_id", "menu_id", "store_menu_id")
+            ],
+        ]
+        base_cats = [
+            c
+            for c in [
+                "week",
+                "holiday_name",
+                "store_id",
+                "menu_id",
+                "store_menu_id",
+            ]
+            if c in fe.columns
         ]
         X_all, feature_cols, categorical_cols = prepare_features(fe, drop_cols)
-        # ensure calendar components are treated as categorical features
-        base_cats = [c for c in ["week", "holiday_name"] if c in X_all.columns]
         categorical_cols = sorted(set(categorical_cols).union(base_cats))
         if "holiday_name" in X_all.columns:
             assert pd.api.types.is_categorical_dtype(
