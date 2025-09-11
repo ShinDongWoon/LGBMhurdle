@@ -46,6 +46,9 @@ def prepare_features(fe_df: pd.DataFrame, drop_cols, feature_cols=None, categori
     if categories_map:
         for c, cats in categories_map.items():
             if c in X.columns:
+                cats = list(cats)
+                if "missing" not in cats:
+                    cats = cats + ["missing"]
                 X[c] = (
                     X[c]
                     .astype("category")
