@@ -25,7 +25,7 @@ features:
   dtw:
     enable: true
     n_clusters: 20
-    use_gpu: true  # fallback to CPU if no CUDA
+    use_gpu: false
 
 model:
   classifier:
