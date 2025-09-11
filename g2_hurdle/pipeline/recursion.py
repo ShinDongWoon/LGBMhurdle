@@ -254,7 +254,7 @@ def recursive_forecast_grouped(
             base_static = prepare_static_future_features(g, schema, cfg, H)
             static_cache[last_date] = base_static
         static_feats = base_static.copy()
-        for col in ("store_id", "menu_id", "store_menu_id"):
+        for col in ("store_id", "menu_id", "store_menu_id", "demand_cluster"):
             if col in g.columns:
                 val = str(g[col].iloc[0])
                 static_feats[col] = pd.Series(

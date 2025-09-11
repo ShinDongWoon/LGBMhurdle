@@ -35,12 +35,14 @@ def run_predict(cfg: dict):
         feature_cols = features_meta.get("feature_cols", [])
         categorical_cols = features_meta.get("categorical_cols", [])
         categories_map = features_meta.get("categories", {})
+        dtw_clusters = art.get("dtw_clusters.json", {})
         base_cats = [
             "week",
             "holiday_name",
             "store_id",
             "menu_id",
             "store_menu_id",
+            "demand_cluster",
         ]
         categorical_cols = sorted(set(categorical_cols).union(base_cats))
         train_cfg = art.get("config.json", {})
@@ -62,6 +64,10 @@ def run_predict(cfg: dict):
         )
         # ensure id
         df["id"] = build_series_id(df, (schema or _schema)["series"])
+        if cfg.get("features", {}).get("dtw", {}).get("enable") and dtw_clusters:
+            df["demand_cluster"] = (
+                df["store_menu_id"].map(dtw_clusters).astype("category")
+            )
         # context length check
         min_ctx = int(cfg.get("data", {}).get("min_context_days", 28))
         # For each id, ensure at least 28 rows

@@ -65,7 +65,7 @@ def run_train(cfg: dict):
     seed = int(cfg.get("runtime", {}).get("seed", 42))
 
     with Timer("Feature engineering"):
-        fe, _ = run_feature_engineering(df, cfg, schema)
+        fe, extras = run_feature_engineering(df, cfg, schema)
         drop_cols = [
             date_col,
             target_col,
@@ -84,6 +84,7 @@ def run_train(cfg: dict):
                 "store_id",
                 "menu_id",
                 "store_menu_id",
+                "demand_cluster",
             ]
             if c in fe.columns
         ]
@@ -419,5 +420,7 @@ def run_train(cfg: dict):
             "categories": categories_map,
         },
     }
+    if extras.get("dtw_clusters") is not None:
+        artifacts["dtw_clusters.json"] = extras["dtw_clusters"]
     save_artifacts(artifacts, artifacts_dir)
     logger.info("Training complete.")
