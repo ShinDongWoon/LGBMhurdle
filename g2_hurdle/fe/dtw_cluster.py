@@ -10,7 +10,7 @@ logger = get_logger("DTWCluster")
 
 
 def compute_dtw_clusters(
-    df: pd.DataFrame, schema: dict, n_clusters: int = 20, use_gpu: bool = False
+    df: pd.DataFrame, schema: dict, n_clusters: int = 4, use_gpu: bool = False
 ):
     """Cluster demand series using Dynamic Time Warping distances.
 
