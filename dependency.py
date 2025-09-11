@@ -10,7 +10,7 @@ REQUIRED_PACKAGES = [
     "scikit-learn",  # optional utilities for model evaluation
     "holidayskr",
     "tslearn",
-    "cupy-cuda11x",
+    "cupy",
     "cuml",
     "dtaidistance[cuda]",
 ]
