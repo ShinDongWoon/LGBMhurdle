@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 
 
@@ -64,19 +65,45 @@ def compute_dtw_clusters(df: pd.DataFrame, schema: dict, n_clusters: int = 20, u
     labels = None
     if use_gpu:
         try:  # pragma: no cover
-            from cuml.cluster import KMeans as cuKMeans
+            from cuml.cluster import KMedoids as cuKMedoids
 
-            km = cuKMeans(n_clusters=n_clusters, random_state=0)
+            km = cuKMedoids(
+                n_clusters=n_clusters, metric="precomputed", random_state=0
+            )
             labels = km.fit_predict(cp.asarray(distance_matrix))
             labels = labels.get()
         except Exception:
             labels = None
 
     if labels is None:
-        from sklearn.cluster import KMeans
+        try:
+            from sklearn_extra.cluster import KMedoids
 
-        km = KMeans(n_clusters=n_clusters, random_state=0)
-        labels = km.fit_predict(distance_matrix)
+            km = KMedoids(
+                n_clusters=n_clusters, metric="precomputed", random_state=0
+            )
+            km.fit(distance_matrix)
+            labels = km.labels_
+        except Exception:
+            rng = np.random.default_rng(0)
+            n = distance_matrix.shape[0]
+            medoids = rng.choice(n, size=n_clusters, replace=False)
+            for _ in range(300):
+                labels = np.argmin(distance_matrix[:, medoids], axis=1)
+                new_medoids = []
+                for k in range(n_clusters):
+                    cluster_idx = np.where(labels == k)[0]
+                    if len(cluster_idx) == 0:
+                        new_medoids.append(medoids[k])
+                        continue
+                    intra = distance_matrix[np.ix_(cluster_idx, cluster_idx)]
+                    costs = intra.sum(axis=1)
+                    new_medoids.append(cluster_idx[np.argmin(costs)])
+                new_medoids = np.array(new_medoids)
+                if np.all(new_medoids == medoids):
+                    break
+                medoids = new_medoids
+            labels = np.argmin(distance_matrix[:, medoids], axis=1)
 
     labels = [int(x) for x in labels]
     clusters = dict(zip(series_ids, labels))
