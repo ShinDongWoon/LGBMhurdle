@@ -4,7 +4,12 @@ from typing import Tuple
 
 
 def ensure_min_positive_ratio(
-    X: pd.DataFrame, y: np.ndarray, min_ratio: float, seed: int = 42
+    X: pd.DataFrame,
+    y: np.ndarray,
+    min_ratio: float,
+    seed: int = 42,
+    categorical_cols: list[str] | None = None,
+    categories_map: dict[str, list[str]] | None = None,
 ) -> Tuple[pd.DataFrame, np.ndarray]:
     """Ensure that the fraction of positive targets is at least ``min_ratio``.
 
@@ -24,12 +29,29 @@ def ensure_min_positive_ratio(
         Desired minimum ratio of positive targets (0-1 range).
     seed : int, optional
         Random seed for sampling, by default ``42``.
+    categorical_cols : list[str] | None, optional
+        Columns to treat as categorical.  If provided, these columns will be
+        converted to the ``category`` dtype prior to resampling.
+    categories_map : dict[str, list[str]] | None, optional
+        Mapping from column name to full list of categories.  When provided,
+        category dtypes are created using the specified category order.
 
     Returns
     -------
     Tuple[pd.DataFrame, np.ndarray]
         Augmented ``X`` and ``y`` with additional positive samples if needed.
     """
+    # Restore categorical dtypes if columns were coerced to object by operations
+    if categorical_cols:
+        for c in categorical_cols:
+            if c in X.columns:
+                cats = categories_map.get(c) if categories_map else None
+                X[c] = (
+                    pd.Categorical(X[c], categories=cats)
+                    if cats
+                    else X[c].astype("category")
+                )
+
     # Preserve original categorical columns to restore dtypes after augmentation
     cat_cols = X.select_dtypes(include="category").columns
 
@@ -62,6 +84,11 @@ def ensure_min_positive_ratio(
 
     # Restore categorical dtypes using original category definitions
     for c in cat_cols:
-        X_aug[c] = pd.Categorical(X_aug[c], categories=X[c].cat.categories)
+        cats = (
+            categories_map.get(c)
+            if categories_map and c in categories_map
+            else X[c].cat.categories
+        )
+        X_aug[c] = pd.Categorical(X_aug[c], categories=cats)
 
     return X_aug, y_aug
