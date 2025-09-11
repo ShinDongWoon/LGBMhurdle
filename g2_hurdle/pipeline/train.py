@@ -342,8 +342,12 @@ def run_train(cfg: dict):
     if drop_cols_full:
         X_all = X_all.drop(columns=drop_cols_full)
         feature_cols = [c for c in feature_cols if c not in drop_cols_full]
+    for c, cats in categories_map.items():
+        if c in X_all.columns:
+            X_all[c] = pd.Categorical(X_all[c], categories=cats)
+
     feature_cols = X_all.columns.tolist()
-    categorical_cols = X_all.select_dtypes(include="category").columns.tolist()
+    categorical_cols = [c for c in categories_map if c in X_all.columns]
     if X_all.shape[1] == 0:
         logger.warning("Full data has no usable features after constant-column removal; using ZeroPredictor.")
         clf_final = ZeroPredictor()
