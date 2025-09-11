@@ -4,8 +4,8 @@ import numpy as np
 
 def create_lags_and_rolling_features(df: pd.DataFrame, target_col: str, series_cols, cfg: dict) -> pd.DataFrame:
     out = df.copy()
-    lags = cfg.get("features", {}).get("lags", [1,2,7,14,28,365])
-    rolls = cfg.get("features", {}).get("rollings", [7,14,28])
+    lags = cfg.get("features", {}).get("lags", [1, 7, 28, 365])
+    rolls = cfg.get("features", {}).get("rollings", [7, 14, 28])
 
     if series_cols:
         g = out.groupby(series_cols, group_keys=False, observed=False, sort=False)
@@ -23,14 +23,15 @@ def create_lags_and_rolling_features(df: pd.DataFrame, target_col: str, series_c
     def _apply(group):
         s = group[target_col]
         for lag in lags:
+            if lag in (2, 14):
+                continue
             group[f"lag_{lag}"] = s.shift(lag)
         s_shift = s.shift(1)  # leakage guard
         for w in rolls:
             r = s_shift.rolling(window=w, min_periods=1)
-            group[f"roll_mean_{w}"] = r.mean()
+            if w not in (7, 14):
+                group[f"roll_mean_{w}"] = r.mean()
             group[f"roll_std_{w}"] = r.std()
-            group[f"roll_min_{w}"] = r.min()
-            group[f"roll_max_{w}"] = r.max()
         for c in group.select_dtypes(include="category").columns:
             if 0 not in group[c].cat.categories:
                 group[c] = group[c].cat.add_categories([0])
@@ -71,7 +72,7 @@ def update_lags_and_rollings(ctx_tail: pd.DataFrame, new_y: float, cfg: dict) ->
     """
 
     ctx = ctx_tail.copy()
-    lags = cfg.get("features", {}).get("lags", [1, 2, 7, 14, 28, 365])
+    lags = cfg.get("features", {}).get("lags", [1, 7, 28, 365])
     rolls = cfg.get("features", {}).get("rollings", [7, 14, 28])
 
     # infer target column: numeric column that is not a lag/rolling feature
@@ -91,6 +92,8 @@ def update_lags_and_rollings(ctx_tail: pd.DataFrame, new_y: float, cfg: dict) ->
 
     # compute lag features for the next step
     for lag in lags:
+        if lag in (2, 14):
+            continue
         if lag == 1:
             new_row[f"lag_{lag}"] = new_y
         else:
@@ -104,10 +107,9 @@ def update_lags_and_rollings(ctx_tail: pd.DataFrame, new_y: float, cfg: dict) ->
     y_series = ctx[target_col]
     for w in rolls:
         hist = y_series.tail(w)
-        new_row[f"roll_mean_{w}"] = hist.mean()
+        if w not in (7, 14):
+            new_row[f"roll_mean_{w}"] = hist.mean()
         new_row[f"roll_std_{w}"] = hist.std()
-        new_row[f"roll_min_{w}"] = hist.min()
-        new_row[f"roll_max_{w}"] = hist.max()
 
     # future target is unknown
     new_row[target_col] = np.nan
