@@ -38,12 +38,15 @@ def safe_import_lgbm():
         sys.exit(1)
 
 def make_calendar_feats(df, date_col):
-    df["dow"] = df[date_col].dt.weekday.astype(np.int16)
     df["dom"] = df[date_col].dt.day.astype(np.int16)
     df["month"] = df[date_col].dt.month.astype(np.int16)
     df["week"] = df[date_col].dt.isocalendar().week.astype(np.int16)
-    df["is_month_start"] = df[date_col].dt.is_month_start.astype(np.int8)
     df["is_month_end"]   = df[date_col].dt.is_month_end.astype(np.int8)
+    for col, period in [("week", 52), ("month", 12)]:
+        val = df[col].astype(float)
+        df[f"{col}_sin"] = np.sin(2 * np.pi * val / period)
+        df[f"{col}_cos"] = np.cos(2 * np.pi * val / period)
+    df.drop(columns=["month"], inplace=True)
     return df
 
 def add_group_lags(df, key_col, target_col, lags=(1,7,14,28)):
@@ -86,7 +89,7 @@ def build_dataset(args):
     for c in [args.key_col]:
         df[c] = df[c].astype("category")
     # 학습 가능한 구간만
-    base_cols = ["dow","dom","month","week","is_month_start","is_month_end",
+    base_cols = ["dom","week","is_month_end","week_sin","week_cos","month_sin","month_cos",
                  "zero_run","lag_1","lag_7","lag_14","lag_28","ma7","sum7", args.key_col]
     X = df[base_cols]
     y = df[args.target_col]
