@@ -51,7 +51,6 @@ def compute_dtw_clusters(df: pd.DataFrame, schema: dict, n_clusters: int = 20, u
                 from cudtw import distance_matrix as cudtw_distance_matrix
 
                 distance_matrix = cudtw_distance_matrix(cp.asarray(data))
-                distance_matrix = cp.asnumpy(distance_matrix)
             except Exception:  # fall back to CPU DTW
                 distance_matrix = None
         except Exception:
@@ -68,8 +67,8 @@ def compute_dtw_clusters(df: pd.DataFrame, schema: dict, n_clusters: int = 20, u
             from cuml.cluster import KMeans as cuKMeans
 
             km = cuKMeans(n_clusters=n_clusters, random_state=0)
-            labels = km.fit_predict(distance_matrix)
-            labels = labels.get() if hasattr(labels, "get") else labels
+            labels = km.fit_predict(cp.asarray(distance_matrix))
+            labels = labels.get()
         except Exception:
             labels = None
 
