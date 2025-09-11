@@ -24,19 +24,16 @@ def build_series_id(df: pd.DataFrame, series_cols):
 def align_to_submission(sub_df: pd.DataFrame, pred_df: pd.DataFrame, id_col="id"):
     # Keep original columns/rows of submission
     out = sub_df.copy()
-    # Identify fillable columns: numeric columns except id
+    # Identify fillable columns: all columns except id
     fill_cols = [c for c in out.columns if c != id_col]
     # Left-join pred on submission id
     merged = out[[id_col]].merge(pred_df, how="left", on=id_col)
-    # Fill NaNs or placeholder zeros in submission while preserving dtypes
+    # Fill NaNs or placeholder zeros in submission while preserving predictions' dtype
     for c in fill_cols:
         if c in pred_df.columns:
             pred_col = merged[c]
-            if pd.api.types.is_numeric_dtype(out[c]):
-                mask = out[c].isna() | (out[c] == 0)
-            else:
-                mask = out[c].isna()
-            out.loc[mask, c] = pred_col.loc[mask].astype(out[c].dtype, copy=False)
+            mask = out[c].isna() | (out[c].astype(str).isin(["0", "0.0"]))
+            out.loc[mask, c] = pred_col.loc[mask]
     return out
 
 def ensure_wide_columns(h=7):
