@@ -24,7 +24,7 @@ features:
   intermittency: { enable: true }
   dtw:
     enable: true
-    n_clusters: 4
+    n_clusters: 3
     use_gpu: false
 
 model:
