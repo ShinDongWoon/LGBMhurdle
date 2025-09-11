@@ -14,7 +14,6 @@ def test_load_data_splits_store_menu(tmp_path):
             "date_col_candidates": ["영업일자"],
             "target_col_candidates": ["매출수량"],
             "id_col_candidates": [
-                "영업장명_메뉴명",
                 "store_id",
                 "menu_id",
                 "store_menu_id",
@@ -25,6 +24,8 @@ def test_load_data_splits_store_menu(tmp_path):
     assert out.loc[0, "store_id"] == "s1"
     assert out.loc[0, "menu_id"] == "m1"
     assert out.loc[0, "store_menu_id"] == "s1_m1"
+    assert "영업장명_메뉴명" not in out.columns
     assert "store_id" in schema["series"]
     assert "menu_id" in schema["series"]
     assert "store_menu_id" in schema["series"]
+    assert "영업장명_메뉴명" not in schema["series"]

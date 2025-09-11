@@ -16,6 +16,8 @@ def load_data(path: str, cfg: dict):
         df["store_menu_id"] = (
             df["store_id"].astype(str) + "_" + df["menu_id"].astype(str)
         )
+    if combined_col in df.columns:
+        df = df.drop(columns=[combined_col])
     schema = resolve_schema(df.columns.tolist(), cfg)
     date_col = schema["date"]
     target_col = schema["target"]

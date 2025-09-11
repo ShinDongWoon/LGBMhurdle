@@ -11,7 +11,7 @@ io:
 data:
   date_col_candidates: ["영업일자"]
   target_col_candidates: ["매출수량"]
-  id_col_candidates: ["영업장명_메뉴명", "store_id", "menu_id", "store_menu_id"]
+  id_col_candidates: ["store_id", "menu_id", "store_menu_id"]
   min_context_days: 7
   min_positive_ratio: 0.01
   use_weights: true
