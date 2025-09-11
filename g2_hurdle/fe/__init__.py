@@ -30,7 +30,9 @@ def run_feature_engineering(
     # the training portion of the data to avoid leakage.
     out = create_lags_and_rolling_features(out, target_col, series_cols, cfg)
     if cfg.get("features", {}).get("target_encoding", {}).get("enable", True):
-        te_cols = [c for c in ("store_id", "menu_id") if c in series_cols]
+        te_cols = [
+            c for c in ("store_id", "menu_id", "store_menu_id") if c in series_cols
+        ]
         out, target_encoding_map = create_target_encoding_features(
             out, te_cols, target_col, date_col, cfg, target_encoding_map
         )

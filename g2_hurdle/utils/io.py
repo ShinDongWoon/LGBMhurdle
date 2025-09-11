@@ -12,6 +12,10 @@ def load_data(path: str, cfg: dict):
         splits = df[combined_col].astype(str).str.split("_", n=1, expand=True)
         df["store_id"] = splits[0]
         df["menu_id"] = splits[1]
+    if "store_id" in df.columns and "menu_id" in df.columns:
+        df["store_menu_id"] = (
+            df["store_id"].astype(str) + "_" + df["menu_id"].astype(str)
+        )
     schema = resolve_schema(df.columns.tolist(), cfg)
     date_col = schema["date"]
     target_col = schema["target"]
