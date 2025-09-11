@@ -10,7 +10,12 @@ from ..utils.timer import Timer
 from ..utils.io import load_data, save_artifacts
 from ..utils.keys import normalize_series_name
 from ..utils.preprocessing import ensure_min_positive_ratio
-from ..fe import run_feature_engineering, prepare_features, compute_dtw_clusters
+from ..fe import (
+    run_feature_engineering,
+    prepare_features,
+    compute_dtw_clusters,
+    create_demand_cluster_features,
+)
 from ..cv.tscv import rolling_forecast_origin_split
 from ..model.classifier import HurdleClassifier
 from ..model.regressor import HurdleRegressor
@@ -134,7 +139,13 @@ def run_train(cfg: dict):
 
         fe_fold = fe_base.loc[tr_mask | va_mask].copy()
         fe_fold["demand_cluster"] = fe_fold["store_menu_id"].map(clusters)
-        feat_cols_fold = feature_cols + ["demand_cluster"]
+        fe_fold, _ = create_demand_cluster_features(fe_fold, schema, cfg)
+        feat_cols_fold = feature_cols + [
+            "demand_cluster",
+            "demand_vs_cluster_mean",
+            "demand_cluster_te_mean",
+            "demand_cluster_te_std",
+        ]
         cat_cols_fold = categorical_cols + ["demand_cluster"]
         categories_fold = {
             **categories_map,
@@ -339,13 +350,20 @@ def run_train(cfg: dict):
         logger.info(f"Optimal threshold={t_star:.3f}, CV wSMAPE≈{score:.3f}")
     dtw_cfg = cfg.get("features", {}).get("dtw", {})
     clusters_all = None
+    te_map = None
     if dtw_cfg.get("enable"):
         n_clusters = int(dtw_cfg.get("n_clusters", 20))
         use_gpu = bool(dtw_cfg.get("use_gpu", True))
         clusters_all = compute_dtw_clusters(df, schema, n_clusters, use_gpu)
         fe_full = fe_base.copy()
         fe_full["demand_cluster"] = fe_full["store_menu_id"].map(clusters_all)
-        feature_cols_full = feature_cols + ["demand_cluster"]
+        fe_full, te_map = create_demand_cluster_features(fe_full, schema, cfg)
+        feature_cols_full = feature_cols + [
+            "demand_cluster",
+            "demand_vs_cluster_mean",
+            "demand_cluster_te_mean",
+            "demand_cluster_te_std",
+        ]
         categorical_cols_full = categorical_cols + ["demand_cluster"]
         categories_map = {
             **categories_map,
@@ -465,5 +483,7 @@ def run_train(cfg: dict):
     }
     if clusters_all is not None:
         artifacts["dtw_clusters.json"] = clusters_all
+    if te_map is not None:
+        artifacts["target_encoding.pkl"] = te_map
     save_artifacts(artifacts, artifacts_dir)
     logger.info("Training complete.")

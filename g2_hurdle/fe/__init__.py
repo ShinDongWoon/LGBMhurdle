@@ -1,11 +1,12 @@
 import pandas as pd
+from typing import Optional
 from .calendar import create_calendar_features
 from .fourier import create_fourier_features
 from .holiday import create_holiday_features
 from .lags_rolling import create_lags_and_rolling_features
 from .intermittency import create_intermittency_features
 from .preprocess import prepare_features
-from .dtw_cluster import compute_dtw_clusters
+from .dtw_cluster import compute_dtw_clusters, create_demand_cluster_features
 from .relational import create_relational_features
 
 
@@ -13,6 +14,7 @@ def run_feature_engineering(
     df: pd.DataFrame,
     cfg: dict,
     schema: dict,
+    mapping: Optional[dict] = None,
 ):
     date_col = schema["date"]
     target_col = schema["target"]
@@ -48,6 +50,9 @@ def run_feature_engineering(
     out = create_lags_and_rolling_features(out, target_col, series_cols, cfg)
     if cfg.get("features", {}).get("intermittency", {}).get("enable", True):
         out = create_intermittency_features(out, target_col, series_cols)
+    if "demand_cluster" in out.columns:
+        out, te_map = create_demand_cluster_features(out, schema, cfg, mapping)
+        extras["target_encoding"] = te_map
     out = create_relational_features(out, schema)
     # store_id and menu_id are only needed for feature construction
     out = out.drop(columns=[c for c in ["store_id", "menu_id"] if c in out.columns])

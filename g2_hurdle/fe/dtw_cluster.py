@@ -1,7 +1,9 @@
 import numpy as np
 import pandas as pd
+from typing import Dict, Optional, Tuple
 
 from ..utils.logging import get_logger
+from .embeddings import create_target_encoding_features
 
 
 logger = get_logger("DTWCluster")
@@ -98,3 +100,83 @@ def compute_dtw_clusters(
     labels = [int(x) for x in labels]
     clusters = dict(zip(series_ids, labels))
     return clusters
+
+
+def create_demand_cluster_features(
+    df: pd.DataFrame,
+    schema: dict,
+    cfg: dict,
+    mapping: Optional[Dict[str, Dict[str, Dict[str, float]]]] = None,
+) -> Tuple[pd.DataFrame, Dict[str, Dict[str, Dict[str, float]]]]:
+    """Add features derived from demand clusters.
+
+    Currently this computes ``demand_vs_cluster_mean`` based on the
+    ``roll_mean_7`` column and applies target encoding to
+    ``demand_cluster``.  The rolling mean ensures that only past demand is
+    used when comparing against the cluster level average.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Feature dataframe containing ``demand_cluster`` and ``roll_mean_7``.
+    schema : dict
+        Schema dictionary with at least ``date`` and ``target`` keys.
+    cfg : dict
+        Configuration dictionary passed to the target encoding routine.
+    mapping : dict, optional
+        Pre-fitted target encoding mapping. When provided, the same mapping is
+        used instead of recomputing it.
+
+    Returns
+    -------
+    out : pd.DataFrame
+        DataFrame with additional cluster-based features.
+    mapping : dict
+        Mapping used for target encoding so that it can be persisted for
+        inference.
+    """
+
+    out = df.copy()
+    date_col = schema.get("date")
+    target_col = schema.get("target")
+    roll_col = "roll_mean_7"
+    cluster_col = "demand_cluster"
+
+    if cluster_col in out.columns:
+        if roll_col not in out.columns and target_col in out.columns:
+            if "store_menu_id" in out.columns:
+                out[roll_col] = (
+                    out.groupby("store_menu_id")[target_col]
+                    .shift(1)
+                    .rolling(window=7, min_periods=1)
+                    .mean()
+                    .reset_index(level=0, drop=True)
+                )
+            else:
+                out[roll_col] = (
+                    out[target_col].shift(1).rolling(window=7, min_periods=1).mean()
+                )
+            out[roll_col] = out[roll_col].fillna(0)
+        if {roll_col, date_col}.issubset(out.columns):
+            cluster_mean = (
+                out.groupby([cluster_col, date_col], observed=False)[roll_col]
+                .transform("mean")
+            )
+            out["demand_vs_cluster_mean"] = (
+                out[roll_col] - cluster_mean
+            ).astype("float32")
+        else:
+            out["demand_vs_cluster_mean"] = 0.0
+    else:
+        out["demand_vs_cluster_mean"] = 0.0
+
+    out, mapping = create_target_encoding_features(
+        out,
+        [cluster_col],
+        target_col,
+        date_col,
+        cfg,
+        mapping=mapping,
+    )
+
+    return out, mapping or {}

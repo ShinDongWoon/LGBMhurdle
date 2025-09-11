@@ -37,6 +37,7 @@ def run_predict(cfg: dict):
         categorical_cols = features_meta.get("categorical_cols", [])
         categories_map = features_meta.get("categories", {})
         dtw_clusters = art.get("dtw_clusters.json", {})
+        te_map = art.get("target_encoding.pkl", {})
         base_cats = [
             "week",
             "holiday_name",
@@ -81,7 +82,7 @@ def run_predict(cfg: dict):
         schema_use = schema or _schema
         schema_use["series"] = ["store_menu_id"]
         df = df.sort_values(["store_menu_id", schema_use["date"]]).reset_index(drop=True)
-        fe, _ = run_feature_engineering(df, cfg, schema_use)
+        fe, _ = run_feature_engineering(df, cfg, schema_use, mapping=te_map)
         drop_cols = [
             schema_use["date"],
             schema_use["target"],

@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 
 def create_target_encoding_features(
@@ -136,3 +136,37 @@ def create_target_encoding_features(
     out = sorted_out.set_index("index").sort_index()
 
     return out, mapping
+
+
+def create_demand_cluster_embeddings(
+    df: pd.DataFrame,
+    target_col: str,
+    date_col: str,
+    cfg: dict,
+    mapping: Optional[Dict[str, Dict[str, Dict[str, float]]]] = None,
+) -> Tuple[pd.DataFrame, Dict[str, Dict[str, Dict[str, float]]]]:
+    """Wrapper that applies target encoding to ``demand_cluster``.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input dataframe with a ``demand_cluster`` column.
+    target_col : str
+        Name of the target column.
+    date_col : str
+        Name of the date column.
+    cfg : dict
+        Configuration dictionary forwarded to
+        :func:`create_target_encoding_features`.
+    mapping : dict, optional
+        Precomputed mapping for inference.
+    """
+
+    return create_target_encoding_features(
+        df,
+        ["demand_cluster"],
+        target_col,
+        date_col,
+        cfg,
+        mapping=mapping,
+    )
