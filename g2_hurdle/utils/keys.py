@@ -28,11 +28,15 @@ def align_to_submission(sub_df: pd.DataFrame, pred_df: pd.DataFrame, id_col="id"
     fill_cols = [c for c in out.columns if c != id_col]
     # Left-join pred on submission id
     merged = out[[id_col]].merge(pred_df, how="left", on=id_col)
-    # Fill only NaNs in submission
+    # Fill NaNs or placeholder zeros in submission while preserving dtypes
     for c in fill_cols:
         if c in pred_df.columns:
-            mask = out[c].isna()
-            out.loc[mask, c] = merged.loc[mask, c]
+            pred_col = merged[c]
+            if pd.api.types.is_numeric_dtype(out[c]):
+                mask = out[c].isna() | (out[c] == 0)
+            else:
+                mask = out[c].isna()
+            out.loc[mask, c] = pred_col.loc[mask].astype(out[c].dtype, copy=False)
     return out
 
 def ensure_wide_columns(h=7):
