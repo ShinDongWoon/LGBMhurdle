@@ -133,7 +133,7 @@ def run_train(cfg: dict):
         tr_inner, va_inner = _split_train_valid_by_tail_dates(df_tr, date_col, ratio_tail=28)
 
         dtw_cfg = cfg.get("features", {}).get("dtw", {})
-        n_clusters = int(dtw_cfg.get("n_clusters", 20))
+        n_clusters = int(dtw_cfg.get("n_clusters", 4))
         use_gpu = bool(dtw_cfg.get("use_gpu", True))
         clusters = compute_dtw_clusters(df_tr, schema, n_clusters, use_gpu)
 
@@ -352,7 +352,7 @@ def run_train(cfg: dict):
     clusters_all = None
     te_map = None
     if dtw_cfg.get("enable"):
-        n_clusters = int(dtw_cfg.get("n_clusters", 20))
+        n_clusters = int(dtw_cfg.get("n_clusters", 4))
         use_gpu = bool(dtw_cfg.get("use_gpu", True))
         clusters_all = compute_dtw_clusters(df, schema, n_clusters, use_gpu)
         fe_full = fe_base.copy()
