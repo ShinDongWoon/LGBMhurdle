@@ -23,7 +23,7 @@ def compute_dtw_clusters(
         Input data containing at least date, target and ``store_menu_id`` columns.
     schema : dict
         Schema mapping with keys ``date`` and ``target``.
-    n_clusters : int, default 20
+    n_clusters : int, default 4
         Number of clusters to form.
     use_gpu : bool, default False
         Retained for compatibility. If ``True``, a warning is logged and CPU
