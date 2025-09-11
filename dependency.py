@@ -9,6 +9,9 @@ REQUIRED_PACKAGES = [
     "pyyaml",  # for reading YAML configuration files
     "scikit-learn",  # optional utilities for model evaluation
     "holidayskr",
+    "tslearn",
+    "cupy-cuda11x",
+    "cuml",
 ]
 
 def install_missing_packages(packages):
