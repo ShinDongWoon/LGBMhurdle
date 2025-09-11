@@ -183,11 +183,29 @@ def run_train(cfg: dict):
                     X_val = X_val[feature_cols_tr]
 
                 if min_pos_ratio > 0:
-                    X_tr, y_tr = ensure_min_positive_ratio(X_tr, y_tr, min_pos_ratio, seed=seed)
+                    X_tr, y_tr = ensure_min_positive_ratio(
+                        X_tr,
+                        y_tr,
+                        min_pos_ratio,
+                        seed=seed,
+                        categorical_cols=categorical_cols_tr,
+                        categories_map=categories_map,
+                    )
+                    if X_val is not None:
+                        for c in categorical_cols_tr:
+                            if c in X_val.columns:
+                                cats = categories_map.get(c) if categories_map else None
+                                X_val[c] = (
+                                    pd.Categorical(X_val[c], categories=cats)
+                                    if cats
+                                    else X_val[c].astype("category")
+                                )
                     # Verify categorical dtypes are preserved after resampling
                     for col in ["store_id", "menu_id"]:
                         if col in X_tr.columns:
-                            logger.debug(f"{col} dtype after ensure_min_positive_ratio: {X_tr[col].dtype}")
+                            logger.debug(
+                                f"{col} dtype after ensure_min_positive_ratio: {X_tr[col].dtype}"
+                            )
 
                 cat_tr = [c for c in categorical_cols_tr if c in X_tr.columns]
                 cls_params = dict(cfg.get("model", {}).get("classifier", {}))
@@ -363,7 +381,14 @@ def run_train(cfg: dict):
                 reg_final = ZeroPredictor()
             else:
                 if min_pos_ratio > 0:
-                    X, y = ensure_min_positive_ratio(X, y, min_pos_ratio, seed=seed)
+                    X, y = ensure_min_positive_ratio(
+                        X,
+                        y,
+                        min_pos_ratio,
+                        seed=seed,
+                        categorical_cols=categorical_cols,
+                        categories_map=categories_map,
+                    )
 
                 # Fit regressor first on all features
                 reg_final = HurdleRegressor(reg_params, categorical_feature=categorical_cols)
