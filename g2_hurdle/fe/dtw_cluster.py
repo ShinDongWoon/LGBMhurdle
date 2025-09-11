@@ -56,7 +56,7 @@ def compute_dtw_clusters(
     n_clusters = int(min(max(1, n_clusters), len(series_ids)))
 
     if use_gpu:
-        logger.warning(
+        logger.debug(
             "GPU acceleration requested but not available; using CPU routines."
         )
 
