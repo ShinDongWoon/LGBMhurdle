@@ -61,6 +61,7 @@ def run_train(cfg: dict):
         df["id"] = build_series_id(df, series_cols)
 
     min_pos_ratio = float(cfg.get("data", {}).get("min_positive_ratio", 0.0))
+    use_weights = bool(cfg.get("data", {}).get("use_weights", False))
     seed = int(cfg.get("runtime", {}).get("seed", 42))
 
     with Timer("Feature engineering"):
@@ -182,14 +183,16 @@ def run_train(cfg: dict):
                 if X_val is not None:
                     X_val = X_val[feature_cols_tr]
 
+                w_tr = None
                 if min_pos_ratio > 0:
-                    X_tr, y_tr = ensure_min_positive_ratio(
+                    X_tr, y_tr, w_tr = ensure_min_positive_ratio(
                         X_tr,
                         y_tr,
                         min_pos_ratio,
                         seed=seed,
                         categorical_cols=categorical_cols_tr,
                         categories_map=categories_map,
+                        use_weights=use_weights,
                     )
                     if X_val is not None:
                         for c in categorical_cols_tr:
@@ -224,7 +227,14 @@ def run_train(cfg: dict):
 
                 # Fit regressor first
                 with Timer(f"Fit fold (train_end={tr_end.date()}) - regressor"):
-                    reg.fit(X_tr, y_tr, X_val, y_val, early_stopping_rounds=esr)
+                    reg.fit(
+                        X_tr,
+                        y_tr,
+                        X_val,
+                        y_val,
+                        sample_weight=w_tr,
+                        early_stopping_rounds=esr,
+                    )
                     reg.feature_names_ = list(
                         getattr(getattr(reg, "model", reg), "feature_name_", getattr(reg, "feature_names_", []))
                     )
@@ -237,7 +247,14 @@ def run_train(cfg: dict):
                 cat_tr = [c for c in cat_tr if c in reg_feats]
                 clf = HurdleClassifier(cls_params, categorical_feature=cat_tr)
                 with Timer(f"Fit fold (train_end={tr_end.date()}) - classifier"):
-                    clf.fit(X_tr, y_tr, X_val, y_val, early_stopping_rounds=esr)
+                    clf.fit(
+                        X_tr,
+                        y_tr,
+                        X_val,
+                        y_val,
+                        sample_weight=w_tr,
+                        early_stopping_rounds=esr,
+                    )
                     clf.feature_names_ = list(
                         getattr(getattr(clf, "model", clf), "feature_name_", getattr(clf, "feature_names_", []))
                     )
@@ -384,20 +401,22 @@ def run_train(cfg: dict):
                 clf_final = ZeroPredictor()
                 reg_final = ZeroPredictor()
             else:
+                w_full = None
                 if min_pos_ratio > 0:
-                    X, y = ensure_min_positive_ratio(
+                    X, y, w_full = ensure_min_positive_ratio(
                         X,
                         y,
                         min_pos_ratio,
                         seed=seed,
                         categorical_cols=categorical_cols,
                         categories_map=categories_map,
+                        use_weights=use_weights,
                     )
 
                 # Fit regressor first on all features
                 reg_final = HurdleRegressor(reg_params, categorical_feature=categorical_cols)
                 with Timer("Final fit - regressor"):
-                    reg_final.fit(X, y, None, None, early_stopping_rounds=0)
+                    reg_final.fit(X, y, None, None, sample_weight=w_full, early_stopping_rounds=0)
                     reg_final.feature_names_ = list(
                         getattr(
                             getattr(reg_final, "model", reg_final),
@@ -412,7 +431,7 @@ def run_train(cfg: dict):
                 cat_final = [c for c in categorical_cols if c in reg_feats]
                 clf_final = HurdleClassifier(cls_params, categorical_feature=cat_final)
                 with Timer("Final fit - classifier"):
-                    clf_final.fit(X, y, None, None, early_stopping_rounds=0)
+                    clf_final.fit(X, y, None, None, sample_weight=w_full, early_stopping_rounds=0)
                     clf_final.feature_names_ = list(
                         getattr(
                             getattr(clf_final, "model", clf_final),

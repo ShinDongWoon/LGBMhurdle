@@ -32,7 +32,15 @@ class HurdleRegressor:
         self.model = LGBMRegressor(**model_params)
         self.categorical_feature = categorical_feature or "auto"
 
-    def fit(self, X_train, y_train, X_val=None, y_val=None, early_stopping_rounds=100):
+    def fit(
+        self,
+        X_train,
+        y_train,
+        X_val=None,
+        y_val=None,
+        sample_weight=None,
+        early_stopping_rounds=100,
+    ):
         """Fit the underlying regressor on positive targets only.
 
         After filtering to positive samples, columns that become constant
@@ -54,6 +62,7 @@ class HurdleRegressor:
             )
             self.model.set_params(min_child_samples=pos_count)
         X_tr, y_tr = X_train[mask_tr], y_train[mask_tr]
+        w_tr = sample_weight[mask_tr] if sample_weight is not None else None
         if hasattr(X_tr, "nunique"):
             tr_counts = X_tr.nunique()
             drop_cols = tr_counts[tr_counts <= 1].index
@@ -92,7 +101,7 @@ class HurdleRegressor:
             }
             if hasattr(X_tr, "columns"):
                 fit_params["feature_name"] = list(X_tr.columns)
-        self.model.fit(X_tr, y_tr, **fit_params)
+        self.model.fit(X_tr, y_tr, sample_weight=w_tr, **fit_params)
         if hasattr(X_tr, "columns"):
             self.feature_names_ = list(X_tr.columns)
 

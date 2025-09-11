@@ -17,7 +17,15 @@ class HurdleClassifier:
         self.model = LGBMClassifier(**model_params)
         self.categorical_feature = categorical_feature or "auto"
 
-    def fit(self, X_train, y_train, X_val=None, y_val=None, early_stopping_rounds=100):
+    def fit(
+        self,
+        X_train,
+        y_train,
+        X_val=None,
+        y_val=None,
+        sample_weight=None,
+        early_stopping_rounds=100,
+    ):
         y_train_bin = (y_train > 0).astype(int)
         unique_classes = np.unique(y_train_bin)
         if len(unique_classes) < 2:
@@ -71,7 +79,12 @@ class HurdleClassifier:
                     callbacks.append(lightgbm.early_stopping(early_stopping_rounds))
                     fit_params["callbacks"] = callbacks
 
-        self.model.fit(X_train, y_train_bin, **fit_params)
+        self.model.fit(
+            X_train,
+            y_train_bin,
+            sample_weight=sample_weight,
+            **fit_params,
+        )
 
     def predict_proba(self, X):
         p = self.model.predict_proba(X)
