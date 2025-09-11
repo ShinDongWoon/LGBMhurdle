@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 
 from g2_hurdle.fe.embeddings import create_target_encoding_features
+from g2_hurdle.fe.preprocess import prepare_features
 
 
 def test_target_encoding_features_with_mapping_and_unseen():
@@ -100,4 +101,19 @@ def test_target_encoding_features_with_mapping_and_unseen():
     assert np.isclose(out2.loc[2, "menu_id_te_std"], m_default["std"])
     assert np.isclose(out2.loc[2, "store_menu_id_te_mean"], sm_default["mean"])
     assert np.isclose(out2.loc[2, "store_menu_id_te_std"], sm_default["std"])
+
+
+def test_prepare_features_marks_identifier_categoricals():
+    df = pd.DataFrame(
+        {
+            "d": pd.to_datetime(["2020-01-01", "2020-01-02"]),
+            "store_id": [1, 2],
+            "menu_id": [10, 20],
+            "store_menu_id": ["1_10", "2_20"],
+            "y": [0, 1],
+        }
+    )
+    _, _, cat_cols = prepare_features(df, ["d", "y"])
+    for col in ["store_id", "menu_id", "store_menu_id"]:
+        assert col in cat_cols
 

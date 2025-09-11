@@ -35,7 +35,13 @@ def run_predict(cfg: dict):
         feature_cols = features_meta.get("feature_cols", [])
         categorical_cols = features_meta.get("categorical_cols", [])
         categories_map = features_meta.get("categories", {})
-        base_cats = ["week", "holiday_name"]
+        base_cats = [
+            "week",
+            "holiday_name",
+            "store_id",
+            "menu_id",
+            "store_menu_id",
+        ]
         categorical_cols = sorted(set(categorical_cols).union(base_cats))
         train_cfg = art.get("config.json", {})
         if "features" in train_cfg:
@@ -71,7 +77,11 @@ def run_predict(cfg: dict):
             schema_use["date"],
             schema_use["target"],
             "id",
-            *[c for c in schema_use["series"] if c not in ("store_id", "menu_id")],
+            *[
+                c
+                for c in schema_use["series"]
+                if c not in ("store_id", "menu_id", "store_menu_id")
+            ],
         ]
         X_test, _, _ = prepare_features(
             fe, drop_cols, feature_cols, categorical_cols, categories_map
