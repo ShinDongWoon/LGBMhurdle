@@ -7,7 +7,7 @@ from joblib import Parallel, delayed
 from ..utils.logging import get_logger
 from ..utils.timer import Timer
 from ..utils.io import load_data, save_artifacts
-from ..utils.keys import build_series_id
+from ..utils.keys import normalize_series_name
 from ..utils.preprocessing import ensure_min_positive_ratio
 from ..fe import run_feature_engineering, prepare_features
 from ..cv.tscv import rolling_forecast_origin_split
@@ -56,9 +56,9 @@ def run_train(cfg: dict):
         df, schema = load_data(train_csv, cfg)
         date_col = schema["date"]
         target_col = schema["target"]
-        series_cols = schema["series"]
+        series_cols = ["store_menu_id"]
         df = df.sort_values([*series_cols, date_col]).reset_index(drop=True)
-        df["id"] = build_series_id(df, series_cols)
+        df["id"] = normalize_series_name(df["store_menu_id"])
 
     min_pos_ratio = float(cfg.get("data", {}).get("min_positive_ratio", 0.0))
     use_weights = bool(cfg.get("data", {}).get("use_weights", False))
@@ -70,11 +70,6 @@ def run_train(cfg: dict):
             date_col,
             target_col,
             "id",
-            *[
-                c
-                for c in series_cols
-                if c not in ("store_id", "menu_id", "store_menu_id")
-            ],
         ]
         base_cats = [
             c
