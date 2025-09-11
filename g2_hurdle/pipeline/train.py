@@ -54,9 +54,10 @@ def run_train(cfg: dict):
 
     with Timer("Load data"):
         df, schema = load_data(train_csv, cfg)
+        schema["series"] = ["store_menu_id"]
         date_col = schema["date"]
         target_col = schema["target"]
-        series_cols = ["store_menu_id"]
+        series_cols = schema["series"]
         df = df.sort_values([*series_cols, date_col]).reset_index(drop=True)
         df["id"] = normalize_series_name(df["store_menu_id"])
 

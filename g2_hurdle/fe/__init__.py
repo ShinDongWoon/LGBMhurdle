@@ -16,7 +16,7 @@ def run_feature_engineering(
 ):
     date_col = schema["date"]
     target_col = schema["target"]
-    series_cols = schema["series"]
+    series_cols = [c for c in schema.get("series", []) if c != "demand_cluster"]
     out = df.copy()
     extras = {}
 

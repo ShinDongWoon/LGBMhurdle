@@ -30,6 +30,8 @@ def run_predict(cfg: dict):
         reg = art.get("regressor.pkl")
         thresh = float(art.get("threshold.json", {}).get("threshold", 0.5))
         schema = art.get("schema.json", None) or {}
+        if schema:
+            schema["series"] = ["store_menu_id"]
         features_meta = art.get("features.json", {})
         feature_cols = features_meta.get("feature_cols", [])
         categorical_cols = features_meta.get("categorical_cols", [])
@@ -61,6 +63,7 @@ def run_predict(cfg: dict):
             f,
             {"data": {"date_col_candidates": [schema.get("date")], "target_col_candidates": [schema.get("target")], "id_col_candidates": schema.get("series", [])}} if schema else cfg,
         )
+        _schema["series"] = ["store_menu_id"]
         # ensure id
         df["id"] = normalize_series_name(df["store_menu_id"])
         if cfg.get("features", {}).get("dtw", {}).get("enable") and dtw_clusters:
@@ -76,6 +79,8 @@ def run_predict(cfg: dict):
 
         # Optionally compute features to ensure column alignment
         schema_use = schema or _schema
+        schema_use["series"] = ["store_menu_id"]
+        df = df.sort_values(["store_menu_id", schema_use["date"]]).reset_index(drop=True)
         fe, _ = run_feature_engineering(df, cfg, schema_use)
         drop_cols = [
             schema_use["date"],
