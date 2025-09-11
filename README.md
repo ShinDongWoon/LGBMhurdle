@@ -213,3 +213,8 @@ data:
 
 If these keys are omitted, `resolve_schema` falls back to the corresponding
 `*_col_candidates` lists to infer column names.
+
+> **Note**
+> The optional `demand_cluster` column represents similarity-based clusters and
+> is used only as an additional categorical feature. The pipeline always groups
+> data by `store_menu_id`; `demand_cluster` never replaces this identifier.
