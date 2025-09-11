@@ -10,14 +10,26 @@ def ensure_min_positive_ratio(
     seed: int = 42,
     categorical_cols: list[str] | None = None,
     categories_map: dict[str, list[str]] | None = None,
-) -> Tuple[pd.DataFrame, np.ndarray]:
+    use_weights: bool = False,
+) -> Tuple[pd.DataFrame, np.ndarray, np.ndarray]:
     """Ensure that the fraction of positive targets is at least ``min_ratio``.
 
     This function operates on a feature matrix ``X`` and corresponding target
     vector ``y``.  If the proportion of positive targets (``y > 0``) is below
-    the requested ratio, positive samples are resampled with replacement until
-    the ratio is satisfied.  Both ``X`` and ``y`` are returned with the
-    additional rows appended.
+    the requested ratio one of two strategies is applied depending on
+    ``use_weights``:
+
+    * ``use_weights=False`` (default): positive samples are resampled with
+      replacement until the required ratio is approximately met, mimicking the
+      previous behaviour.
+    * ``use_weights=True``: the original data is kept intact and sample weights
+      for positive examples are scaled instead of duplicating rows.  The weight
+      scaling is equivalent to the resampling strategy so the model receives
+      the same effective contribution from positive samples without inflating
+      the dataset size.
+
+    Both ``X`` and ``y`` are returned along with a ``sample_weight`` array
+    suitable for model training.
 
     Parameters
     ----------
@@ -38,8 +50,8 @@ def ensure_min_positive_ratio(
 
     Returns
     -------
-    Tuple[pd.DataFrame, np.ndarray]
-        Augmented ``X`` and ``y`` with additional positive samples if needed.
+    Tuple[pd.DataFrame, np.ndarray, np.ndarray]
+        Possibly augmented ``X`` and ``y`` along with a ``sample_weight`` array.
     """
     # Restore categorical dtypes if columns were coerced to object by operations
     if categorical_cols:
@@ -56,39 +68,48 @@ def ensure_min_positive_ratio(
     cat_cols = X.select_dtypes(include="category").columns
 
     if min_ratio <= 0:
-        return X, y
+        return X, y, np.ones(len(y))
 
     total = len(y)
     if total == 0:
-        return X, y
+        return X, y, np.ones(len(y))
 
     pos_mask = y > 0
     pos_count = int(pos_mask.sum())
     if pos_count == 0:
-        return X, y
+        return X, y, np.ones(len(y))
 
     current_ratio = pos_count / total
     if current_ratio >= min_ratio:
-        return X, y
+        return X, y, np.ones(len(y))
 
     required_pos = int(np.ceil(min_ratio * total))
-    additional = required_pos - pos_count
-    rng = np.random.default_rng(seed)
-    pos_indices = np.flatnonzero(pos_mask)
-    extra_indices = rng.choice(pos_indices, size=additional, replace=True)
+    sample_weight = np.ones(len(y))
 
-    X_extra = X.iloc[extra_indices].copy()
-    y_extra = y[extra_indices]
-    X_aug = pd.concat([X, X_extra], ignore_index=True)
-    y_aug = np.concatenate([y, y_extra])
+    if use_weights:
+        weight_pos = required_pos / pos_count
+        sample_weight[pos_mask] = weight_pos
+        X_aug, y_aug = X, y
+    else:
+        additional = required_pos - pos_count
+        rng = np.random.default_rng(seed)
+        pos_indices = np.flatnonzero(pos_mask)
+        extra_indices = rng.choice(pos_indices, size=additional, replace=True)
 
-    # Restore categorical dtypes using original category definitions
-    for c in cat_cols:
-        cats = (
-            categories_map.get(c)
-            if categories_map and c in categories_map
-            else X[c].cat.categories
-        )
-        X_aug[c] = pd.Categorical(X_aug[c], categories=cats)
+        X_extra = X.iloc[extra_indices].copy()
+        y_extra = y[extra_indices]
+        X_aug = pd.concat([X, X_extra], ignore_index=True)
+        y_aug = np.concatenate([y, y_extra])
 
-    return X_aug, y_aug
+        # Restore categorical dtypes using original category definitions
+        for c in cat_cols:
+            cats = (
+                categories_map.get(c)
+                if categories_map and c in categories_map
+                else X[c].cat.categories
+            )
+            X_aug[c] = pd.Categorical(X_aug[c], categories=cats)
+
+        sample_weight = np.ones(len(y_aug))
+
+    return X_aug, y_aug, sample_weight
