@@ -85,6 +85,7 @@ def run_train(cfg: dict):
             c
             for c in [
                 "week",
+                "dow",
                 "holiday_name",
                 "store_id",
                 "menu_id",

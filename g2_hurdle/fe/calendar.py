@@ -18,6 +18,9 @@ def create_calendar_features(df: pd.DataFrame, date_col: str) -> pd.DataFrame:
     out["week"] = d.dt.isocalendar().week.astype(int)
     out["month"] = d.dt.month
     out["year"] = d.dt.year
+    dow = d.dt.weekday
+    out["is_weekend"] = (dow >= 5).astype(int)
+    out["dow"] = dow.astype("category")
 
     # cyclical (sin/cos) encodings
     for col, period in [("week", 52), ("month", 12)]:

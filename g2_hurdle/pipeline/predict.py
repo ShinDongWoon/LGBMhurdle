@@ -40,6 +40,7 @@ def run_predict(cfg: dict):
         te_map = art.get("target_encoding.pkl", {})
         base_cats = [
             "week",
+            "dow",
             "holiday_name",
             "store_id",
             "menu_id",
