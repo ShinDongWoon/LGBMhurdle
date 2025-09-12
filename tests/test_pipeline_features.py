@@ -1,6 +1,10 @@
 import json
 
 import pandas as pd
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from g2_hurdle.pipeline.train import run_train
 import g2_hurdle.pipeline.predict as predict_module
@@ -10,7 +14,7 @@ from g2_hurdle.utils.keys import normalize_series_name
 
 def test_pipeline_produces_dow_and_weekend(tmp_path, monkeypatch):
     train_path = tmp_path / "train.csv"
-    dates = pd.date_range("2024-01-04", periods=5, freq="D")
+    dates = pd.date_range("2024-01-04", periods=5, freq="D", tz="Asia/Seoul")
     train_df = pd.DataFrame(
         {
             "영업일자": dates,
@@ -60,7 +64,7 @@ def test_pipeline_produces_dow_and_weekend(tmp_path, monkeypatch):
 
     test_dir = tmp_path / "test"
     test_dir.mkdir()
-    test_dates = pd.date_range("2024-01-09", periods=7, freq="D")
+    test_dates = pd.date_range("2024-01-09", periods=7, freq="D", tz="Asia/Seoul")
     test_df = pd.DataFrame(
         {
             "영업일자": test_dates,
@@ -88,18 +92,21 @@ def test_pipeline_produces_dow_and_weekend(tmp_path, monkeypatch):
         "cv": {"horizon": 1},
     }
 
-    captured = []
+    captured = {}
     orig_prepare = predict_module.prepare_features
 
-    def capture_prepare(*args, **kwargs):
-        X, fcols, ccols = orig_prepare(*args, **kwargs)
-        captured.append(X)
+    def capture_prepare(fe, *args, **kwargs):
+        captured["fe"] = fe.copy()
+        X, fcols, ccols = orig_prepare(fe, *args, **kwargs)
+        captured["X"] = X
         return X, fcols, ccols
 
     monkeypatch.setattr(predict_module, "prepare_features", capture_prepare)
     run_predict(cfg_pred)
 
     assert captured, "prepare_features was not called"
-    X_pred = captured[0]
+    fe_df = captured["fe"]
+    X_pred = captured["X"]
+    assert fe_df["영업일자"].dt.tz.zone == "Asia/Seoul"
     assert "dow" in X_pred.columns
     assert "is_weekend" in X_pred.columns

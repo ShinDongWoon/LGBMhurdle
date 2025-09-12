@@ -1,12 +1,21 @@
 import pandas as pd
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+
 from g2_hurdle.utils.io import load_data
 
 def test_load_data_splits_store_menu(tmp_path):
-    df = pd.DataFrame({
-        "영업일자": pd.to_datetime(["2024-01-01"]),
-        "매출수량": [1],
-        "영업장명_메뉴명": ["s1_m1"],
-    })
+    df = pd.DataFrame(
+        {
+            "영업일자": pd.to_datetime(["2024-01-01"], utc=True).tz_convert(
+                "Asia/Seoul"
+            ),
+            "매출수량": [1],
+            "영업장명_메뉴명": ["s1_m1"],
+        }
+    )
     csv_path = tmp_path / "data.csv"
     df.to_csv(csv_path, index=False)
     cfg = {
