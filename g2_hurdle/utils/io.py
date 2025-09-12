@@ -23,6 +23,12 @@ def load_data(path: str, cfg: dict):
     target_col = schema["target"]
     series_cols = schema["series"]
     df[date_col] = pd.to_datetime(df[date_col])
+    d = pd.to_datetime(df[date_col])
+    df[date_col] = (
+        d.dt.tz_localize("Asia/Seoul")
+        if d.dt.tz is None
+        else d.dt.tz_convert("Asia/Seoul")
+    )
     for c in series_cols:
         df[c] = df[c].astype("category")
     df = df.sort_values([*series_cols, date_col]).drop_duplicates([*series_cols, date_col])
