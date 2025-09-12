@@ -39,10 +39,10 @@ model:
     max_bin: 255  # Reduce if GPU memory is insufficient
   regressor:
     objective: "tweedie"
-    tweedie_variance_power: 1.4
+    tweedie_variance_power: 1.2
     num_leaves: 127  # Reduce if GPU memory is insufficient
     learning_rate: 0.03
-    n_estimators: 1500
+    n_estimators: 4000
     subsample: 0.9
     feature_fraction: 0.9
     min_child_samples: 20
