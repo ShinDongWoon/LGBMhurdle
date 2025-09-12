@@ -33,7 +33,17 @@ def prepare_static_future_features(
     """
     date_col = schema["date"]
     last_date = df[date_col].max()
-    future_dates = pd.date_range(last_date + pd.Timedelta(days=1), periods=horizon, freq="D")
+    last_date = (
+        last_date.tz_localize("Asia/Seoul")
+        if last_date.tz is None
+        else last_date.tz_convert("Asia/Seoul")
+    )
+    future_dates = pd.date_range(
+        last_date + pd.Timedelta(days=1),
+        periods=horizon,
+        freq="D",
+        tz="Asia/Seoul",
+    )
     future_df = pd.DataFrame({date_col: future_dates})
     out = create_calendar_features(future_df, date_col)
     if cfg.get("features", {}).get("use_holidays"):
