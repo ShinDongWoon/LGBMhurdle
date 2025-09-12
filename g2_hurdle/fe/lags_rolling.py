@@ -23,8 +23,6 @@ def create_lags_and_rolling_features(df: pd.DataFrame, target_col: str, series_c
     def _apply(group):
         s = group[target_col]
         for lag in lags:
-            if lag in (2, 14):
-                continue
             group[f"lag_{lag}"] = s.shift(lag)
         s_shift = s.shift(1)  # leakage guard
         for w in rolls:
@@ -94,8 +92,6 @@ def update_lags_and_rollings(ctx_tail: pd.DataFrame, new_y: float, cfg: dict) ->
 
     # compute lag features for the next step
     for lag in lags:
-        if lag in (2, 14):
-            continue
         if lag == 1:
             new_row[f"lag_{lag}"] = new_y
         else:

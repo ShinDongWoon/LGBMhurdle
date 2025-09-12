@@ -17,7 +17,7 @@ data:
 
 features:
   fourier: { weekly_K: 3, yearly_K: 10 }
-  lags: [1,7,28,365]
+  lags: [1,2,7,14,28,365]
   rollings: [7,14,28]
   # Whether to include holiday-based features. Set to false to disable.
   use_holidays: true
