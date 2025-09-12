@@ -265,6 +265,11 @@ def recursive_forecast_grouped(
     for sid, g in context_df.groupby("_series_id"):
         g = g.sort_values(date_col).copy()
         last_date = g[date_col].max()
+        last_date = (
+            last_date.tz_localize("Asia/Seoul")
+            if last_date.tz is None
+            else last_date.tz_convert("Asia/Seoul")
+        )
 
         base_static = static_cache.get(last_date)
         if base_static is None:
