@@ -48,6 +48,8 @@ def run_predict(cfg: dict):
             "demand_cluster",
         ]
         categorical_cols = sorted(set(categorical_cols).union(base_cats))
+        if "dow" in categorical_cols:
+            categories_map["dow"] = list(range(7)) + ["missing"]
         train_cfg = art.get("config.json", {})
         if "features" in train_cfg:
             cfg["features"] = train_cfg["features"]
