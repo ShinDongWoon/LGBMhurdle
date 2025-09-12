@@ -133,24 +133,35 @@ def run_train(cfg: dict):
         tr_inner, va_inner = _split_train_valid_by_tail_dates(df_tr, date_col, ratio_tail=28)
 
         dtw_cfg = cfg.get("features", {}).get("dtw", {})
-        n_clusters = int(dtw_cfg.get("n_clusters", 2))
-        use_gpu = bool(dtw_cfg.get("use_gpu", True))
-        clusters = compute_dtw_clusters(df_tr, schema, n_clusters, use_gpu)
 
         fe_fold = fe_base.loc[tr_mask | va_mask].copy()
-        fe_fold["demand_cluster"] = fe_fold["store_menu_id"].map(clusters)
-        fe_fold, _ = create_demand_cluster_features(fe_fold, schema, cfg)
-        feat_cols_fold = feature_cols + [
-            "demand_cluster",
-            "demand_vs_cluster_mean",
-            "demand_cluster_te_mean",
-            "demand_cluster_te_std",
-        ]
-        cat_cols_fold = categorical_cols + ["demand_cluster"]
-        categories_fold = {
-            **categories_map,
-            "demand_cluster": sorted(set(clusters.values())) + ["missing"],
-        }
+        feat_cols_fold = feature_cols
+        cat_cols_fold = categorical_cols
+        categories_fold = categories_map
+        clusters = {}
+
+        if dtw_cfg.get("enable"):
+            n_clusters = int(dtw_cfg.get("n_clusters", 2))
+            use_gpu = bool(dtw_cfg.get("use_gpu", True))
+            clusters = compute_dtw_clusters(df_tr, schema, n_clusters, use_gpu)
+
+            fe_fold["demand_cluster"] = fe_fold["store_menu_id"].map(clusters)
+            fe_fold, _ = create_demand_cluster_features(fe_fold, schema, cfg)
+            feat_cols_fold = feature_cols + [
+                "demand_cluster",
+                "demand_vs_cluster_mean",
+                "demand_cluster_te_mean",
+                "demand_cluster_te_std",
+            ]
+            cat_cols_fold = categorical_cols + ["demand_cluster"]
+            categories_fold = {
+                **categories_map,
+                "demand_cluster": sorted(set(clusters.values())) + ["missing"],
+            }
+        else:
+            # DTW is disabled; retain original feature set without modifications
+            clusters = {}
+
         X_fold, _, _ = prepare_features(
             fe_fold,
             drop_cols,
@@ -281,7 +292,8 @@ def run_train(cfg: dict):
                 from .recursion import recursive_forecast_grouped
                 # Use context: all rows up to tr_end per series
                 context = df[df[date_col] <= tr_end].copy()
-                context["demand_cluster"] = context["store_menu_id"].map(clusters)
+                if dtw_cfg.get("enable"):
+                    context["demand_cluster"] = context["store_menu_id"].map(clusters)
                 preds_df = recursive_forecast_grouped(
                     context,
                     schema,
