@@ -190,8 +190,6 @@ def _build_dynamic_row(
     """Construct a DataFrame row of dynamic features for feature ordering."""
     row = {}
     for lag in lags:
-        if lag in (2, 14):
-            continue
         row[f"lag_{lag}"] = float(history[-lag])
     for w in rolls:
         window = history[-w:]
@@ -251,7 +249,6 @@ def recursive_forecast_grouped(
         ],
     ]
     lags = cfg.get("features", {}).get("lags", [1, 7, 28, 365])
-    lags = [l for l in lags if l not in (2, 14)]
     rolls = cfg.get("features", {}).get("rollings", [7, 14, 28])
     tail_len = max(max(lags), max(rolls)) + 1
     use_intermittency = cfg.get("features", {}).get("intermittency", {}).get(
