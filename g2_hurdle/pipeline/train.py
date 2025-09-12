@@ -106,6 +106,8 @@ def run_train(cfg: dict):
         for c in categorical_cols:
             if c in X_all.columns:
                 X_all[c] = X_all[c].astype("category")
+                if c == "dow":
+                    X_all[c] = X_all[c].cat.set_categories(list(range(7)))
                 if "missing" not in X_all[c].cat.categories:
                     X_all[c] = X_all[c].cat.add_categories(["missing"])
                 X_all[c] = X_all[c].fillna("missing")
