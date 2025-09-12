@@ -37,9 +37,17 @@ def test_update_lags_and_rollings_updates_min_max():
 
 def test_build_dynamic_row_includes_min_max():
     history = np.array([1, 2, 3, 4, 5], dtype=np.float32)
-    row = _build_dynamic_row(history, None, [], [3], "date", pd.Timestamp("2020-01-01"))
+    row = _build_dynamic_row(
+        history,
+        None,
+        [],
+        [3],
+        "date",
+        pd.Timestamp("2020-01-01", tz="Asia/Seoul"),
+    )
     assert row["roll_min_3"].iat[0] == 3.0
     assert row["roll_max_3"].iat[0] == 5.0
+    assert row["date"].dt.tz.zone == "Asia/Seoul"
 
 
 def test_compute_dynamic_features_with_min_max():
