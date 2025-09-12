@@ -12,7 +12,9 @@ def create_calendar_features(df: pd.DataFrame, date_col: str) -> pd.DataFrame:
     """
 
     out = df.copy()
-    d = out[date_col]
+    d = pd.to_datetime(out[date_col])
+    d = d.dt.tz_localize("Asia/Seoul") if d.dt.tz is None else d.dt.tz_convert("Asia/Seoul")
+    out[date_col] = d
 
     # raw components
     out["week"] = d.dt.isocalendar().week.astype(int)
