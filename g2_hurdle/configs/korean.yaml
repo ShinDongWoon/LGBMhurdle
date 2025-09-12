@@ -23,6 +23,10 @@ features:
   # Whether to include holiday-based features. Set to false to disable.
   use_holidays: false
   intermittency: { enable: true }
+  dtw:
+    enable: true   # or false
+    n_clusters: 2
+    use_gpu: false
 
 model:
   classifier:
