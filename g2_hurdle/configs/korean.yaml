@@ -24,9 +24,9 @@ features:
 
 model:
   classifier:
-    num_leaves: 63  # Reduce if GPU memory is insufficient
-    learning_rate: 0.05
-    n_estimators: 2000
+    num_leaves: 31
+    learning_rate: 0.02
+    n_estimators: 5000
     subsample: 0.8
     feature_fraction: 0.8
     reg_alpha: 1.0
@@ -38,9 +38,9 @@ model:
   regressor:
     objective: "tweedie"
     tweedie_variance_power: 1.2
-    num_leaves: 127  # Reduce if GPU memory is insufficient
-    learning_rate: 0.03
-    n_estimators: 4000
+    num_leaves: 41  # Reduce if GPU memory is insufficient
+    learning_rate: 0.01
+    n_estimators: 10000
     subsample: 0.8
     feature_fraction: 0.8
     min_child_samples: 50
