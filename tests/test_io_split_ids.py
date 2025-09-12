@@ -24,6 +24,7 @@ def test_load_data_splits_store_menu(tmp_path):
     assert out.loc[0, "store_id"] == "s1"
     assert out.loc[0, "menu_id"] == "m1"
     assert out.loc[0, "store_menu_id"] == "s1_m1"
+    assert out["영업일자"].dt.tz.zone == "Asia/Seoul"
     assert "영업장명_메뉴명" not in out.columns
     assert "store_id" in schema["series"]
     assert "menu_id" in schema["series"]
