@@ -137,6 +137,8 @@ Rigorous evaluation of this codebase demonstrated a highly competitive performan
 
 # 4. Run prediction
 !python predict.py
+```
+---
 ## 📜 프로젝트 개요 (Project Overview)
 
 본 프로젝트는 **간헐적 수요(Intermittent Demand)** 특성을 가진 시계열 데이터의 미래 판매량을 예측하는 것을 목표로 합니다. 간헐적 수요란 '0' 값이 빈번하게 나타나는 데이터를 의미하며, 일반적인 시계열 예측 모델로는 정확한 예측이 어렵습니다.
