@@ -27,11 +27,12 @@
 
 ---
 
-![Pipeline Flow1](<img width="1024" height="1024" alt="Gemini_Generated_Image_2m0zym2m0zym2m0z" src="https://github.com/user-attachments/assets/b9b22538-2879-4514-874f-cfd42584fa12" />)
+<img width="512" height="512" alt="Gemini_Generated_Image_2m0zym2m0zym2m0z" src="https://github.com/user-attachments/assets/8bec8402-4d52-429c-873b-f8426e368281" />
 
-![Pipeline Flow2]<img width="1024" height="1024" alt="Gemini_Generated_Image_2m0zyn2m0zyn2m0z" src="https://github.com/user-attachments/assets/680ad867-937b-4b2f-9418-93eca84c9a7b" />
 
-![Pipeline Flow3]<img width="1024" height="1024" alt="Gemini_Generated_Image_2m0zyo2m0zyo2m0z" src="https://github.com/user-attachments/assets/d05af1d9-7bcb-455d-8465-ef54b263a38d" />
+<img width="512" height="512" alt="Gemini_Generated_Image_2m0zyn2m0zyn2m0z" src="https://github.com/user-attachments/assets/680ad867-937b-4b2f-9418-93eca84c9a7b" />
+
+<img width="512" height="512" alt="Gemini_Generated_Image_2m0zyo2m0zyo2m0z" src="https://github.com/user-attachments/assets/d05af1d9-7bcb-455d-8465-ef54b263a38d" />
 
 
 ---
@@ -78,8 +79,6 @@
 본 코드베이스는 크게 **데이터 전처리 및 피처 엔지니어링**, **모델 학습**, **재귀적 예측**의 세 단계로 구성됩니다.
 
 ### 1. 전체 코드 파이프라인 흐름
-
-![Pipeline Flow](<img width="1024" height="1024" alt="Gemini_Generated_Image_2m0zym2m0zym2m0z" src="https://github.com/user-attachments/assets/b9b22538-2879-4514-874f-cfd42584fa12" />)
 
 1.  **초기 설정 (`configs/`)**: `base.yaml`, `korean.yaml` 등의 설정 파일을 로드하여 프로젝트 전반의 하이퍼파라미터, 데이터 경로, 사용할 피처 목록 등을 정의합니다.
 2.  **데이터 로딩 및 전처리 (`fe/preprocess.py`)**: 원본 데이터를 로드하고, 기본적인 데이터 타입 변환 및 결측치 처리 등의 전처리 과정을 수행합니다.
