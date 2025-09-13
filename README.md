@@ -111,52 +111,30 @@
 
 ---
 
-## 🚀 시작하기 (Getting Started)
+## 🚀 Colab 에서 시작하기 (Getting Started)
 
 ### 1. 요구사항 (Prerequisites)
 
 - Python 3.8+
-- poetry
 
-### 2. 설치 (Installation)
+
+### 2. Quickstart (Colab)
 
 ```bash
 # 1. 저장소 클론
-git clone [https://github.com/shindongwoon/lgbmhurdle.git](https://github.com/shindongwoon/lgbmhurdle.git)
+!git clone [https://github.com/shindongwoon/lgbmhurdle.git](https://github.com/shindongwoon/lgbmhurdle.git)
 cd lgbmhurdle
 
 # 2. 의존성 설치
-poetry install
+!python dependency.py
 
-## Quick Start
+# 3. 모델 훈련 진행
+!python train.py
 
-### Local Environment
-
-**1. Install Dependencies**
-```bash
-python dependency.py
-## Quick Start
-```bash
-python -m g2_hurdle.cli train \
-  --train_csv data/train.csv \
-  --config g2_hurdle/configs/base.yaml
-
-python -m g2_hurdle.cli predict \
-  --test_dir data/test \
-  --sample_submission data/sample_submission.csv \
-  --out_path outputs/submission.csv
+# 4. 모델 예측 진행
+!python predict.py
 ```
 All imports are relative; drop this folder as project root and run the commands.
-
-## Quickstart (Colab)
-
-Run the top-level scripts directly in a notebook:
-
-```python
-!python dependency.py  # installs required packages
-!python train.py       # uses g2_hurdle/configs/korean.yaml and data/train.csv
-!python predict.py     # uses g2_hurdle/configs/korean.yaml, data/test, and data/sample_submission.csv
-```
 
 By default, both scripts load the configuration from `g2_hurdle/configs/korean.yaml`.
 `train.py` reads `data/train.csv` and stores model artifacts in `./artifacts`.
@@ -169,11 +147,6 @@ To enable GPU acceleration, set `runtime.use_gpu` to `true` in the YAML
 configuration. The pipeline will automatically set `device_type: gpu` for the
 LightGBM models. The older `device` parameter is deprecated and should not be
 used.
-
-## Dependencies
-
-Run `python dependency.py` to install dependencies.
-
 
 ## Data configuration
 
