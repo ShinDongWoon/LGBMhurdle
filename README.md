@@ -5,6 +5,138 @@
 [![Python Version](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/)
 [![wSMAPE Score](https://img.shields.io/badge/wSMAPE-0.555008-orange)](.)
 
+
+## 📜 Project Overview
+
+This project is engineered to tackle the complex challenge of **forecasting time series data characterized by intermittent demand**. Intermittent demand, where sales data is dominated by frequent zero values, poses a significant hurdle for traditional forecasting models. Standard algorithms often struggle to accurately predict sporadic, non-zero events.
+
+To address this, we employ a sophisticated **Hurdle Model** architecture. This approach strategically decomposes the forecasting problem into two distinct, more manageable sub-problems:
+1.  A **Binary Classification** task to predict *whether* a sale will occur (i.e., hurdle the zero-demand barrier).
+2.  A **Regression** task to predict *how much* will be sold, conditioned on a sale actually happening.
+
+Both models are implemented using **LightGBM**, a high-performance gradient boosting framework renowned for its speed and accuracy, ensuring a robust and efficient solution.
+
+---
+
+## 🚀 Key Features
+
+-   **Hurdle Model Architecture**: By decoupling the prediction of sale occurrence from sale quantity, the model architecture is specifically tailored to handle zero-inflated datasets, maximizing predictive accuracy for intermittent demand patterns.
+-   **High-Performance LightGBM Engine**: Utilizes LightGBM as the backbone for both classification and regression tasks, leveraging its exceptional speed and state-of-the-art performance in gradient boosting.
+-   **Advanced Feature Engineering**: Implements a comprehensive suite of engineered features to capture complex temporal dynamics:
+    -   **Calendar-based Features**: Extracts signals from timestamps (e.g., day of week, week of year, month, quarter).
+    -   **Lag and Rolling Window Statistics**: Incorporates historical trends and patterns using lagged values and rolling statistical aggregations (mean, std, min, max).
+    -   **Fourier Transform Features**: Precisely models complex seasonality (e.g., weekly, yearly cycles) by transforming temporal features into the frequency domain.
+-   **Recursive Forecasting Pipeline**: Employs a recursive, multi-step forecasting strategy. For long prediction horizons, the model uses its own previous predictions as inputs to generate features for subsequent steps, ensuring stable and accurate long-term forecasts.
+-   **Efficient Caching System**: A built-in caching mechanism serializes the results of computationally expensive feature engineering steps. This dramatically reduces runtime during iterative experiments and model tuning, accelerating the development cycle.
+-   **Configuration-Driven Workflow**: The entire pipeline is managed via `YAML` configuration files. This approach decouples logic from parameters, ensuring experimental **reproducibility** and simplifying hyperparameter tuning and feature selection.
+
+---
+
+## 📊 Data Schema Definition
+
+For the model to operate correctly, the input and output data must adhere to the following specifications.
+
+### 1. Input Data Schema
+
+All source data for training (`train.csv`) and inference (`TEST_*.csv`) must be structured in a **long format**. Each row should represent a single observation for a specific item on a specific date.
+
+**Required Features:**
+
+| Column Name       | Data Type           | Description                                                                                             |
+| :---------------- | :------------------ | :------------------------------------------------------------------------------------------------------ |
+| `Date`            | `Date` or `String`  | The date of the sales record (e.g., `YYYY-MM-DD`).                                                      |
+| `Series_Identifier` | `String`            | A unique identifier for each distinct time series (e.g., a combination of store and item ID).         |
+| `Sales_Quantity`  | `Numeric` (Integer) | The actual quantity sold on that date. This serves as the **target variable** for the model to predict. |
+
+### 2. Output Data Schema
+
+The final prediction output (`sample_submission.csv`) must be pivoted into a **wide-format** structure. In this format, each time series (`Series_Identifier`) becomes a separate column.
+
+**Output Table Structure:**
+
+-   **Index**: The rows are indexed by `Date`.
+-   **Column Headers**: The first column is `Date`, followed by columns for every unique `Series_Identifier`.
+-   **Values**: Each cell contains the **predicted `Sales_Quantity`** for the corresponding `Date` (row) and `Series_Identifier` (column).
+
+**Example Structure:**
+
+| Date       | StoreA_ItemX | StoreA_ItemY | StoreB_ItemZ | ... |
+| :--------- | :----------- | :----------- | :----------- | :-- |
+| 2025-09-16 | 15           | 0            | 21           | ... |
+| 2025-09-17 | 12           | 3            | 18           | ... |
+| ...        | ...          | ...          | ...          | ... |
+
+This standard format facilitates easy analysis and submission of time series forecasting results.
+
+---
+
+## ⚙️ Code Pipeline Analysis
+
+The codebase is modularly structured into three core stages: **Data Preprocessing & Feature Engineering**, **Model Training**, and **Recursive Inference**.
+
+### 1. End-to-End Pipeline Flow
+
+1.  **Configuration Loading (`configs/`)**: The pipeline initializes by loading hyperparameters, file paths, and feature definitions from `YAML` configuration files (e.g., `base.yaml`, `korean.yaml`).
+2.  **Data Ingestion & Preprocessing (`fe/preprocess.py`)**: Raw data is loaded, and initial cleaning is performed, including data type casting and handling of missing values.
+3.  **Feature Engineering (`fe/`)**: A rich set of features is constructed from the preprocessed data.
+    -   `calendar.py`: Generates calendar-based features.
+    -   `lags_rolling.py`: Creates lag and rolling window statistical features.
+    -   `fourier.py`: Produces Fourier term features for seasonality modeling.
+4.  **Model Training (`pipeline/train.py`)**:
+    -   **Data Splitting**: Utilizes Time Series Cross-Validation (`cv/tscv.py`) to create robust training and validation splits that respect the temporal order of the data.
+    -   **Classifier Training (`model/classifier.py`)**: A LightGBM classifier is trained on a binary target (1 if sales > 0, else 0).
+    -   **Regressor Training (`model/regressor.py`)**: A LightGBM regressor is trained exclusively on data where sales > 0 to predict the actual sales quantity.
+5.  **Model Serialization**: The trained classifier and regressor model artifacts are saved to disk.
+6.  **Inference (`pipeline/predict.py` & `recursion.py`)**:
+    -   The pipeline iterates one step at a time over the prediction horizon.
+    -   **Classification Prediction**: The classifier predicts the probability of a sale occurring on the next day.
+    -   **Hurdle Application**: If the predicted probability exceeds a predefined threshold, the regressor predicts the sales quantity. Otherwise, the prediction is set to 0.
+    -   **Recursive Update**: The new prediction is used to update the lag and rolling features for the subsequent day's forecast. This loop continues until the entire prediction horizon is covered.
+7.  **Submission Generation**: The final predictions are formatted to match the required `sample_submission.csv` schema.
+
+### 2. Module Contributions to Performance
+
+| Module Path                       | Core Function                   | Contribution to Performance                                                                                                                                                             |
+| :-------------------------------- | :------------------------------ | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`g2_hurdle/fe/`** | **Feature Engineering** | Fundamentally improves model accuracy by translating complex temporal patterns (trends, seasonality, autocorrelation) into a format the model can learn. Lag and rolling features are critical. |
+| **`g2_hurdle/utils/cache.py`** | **Feature Caching** | Drastically reduces experiment turnaround time by caching the results of expensive feature computations. This accelerates development and hyperparameter tuning by avoiding redundant work.     |
+| **`g2_hurdle/model/`** | **Hurdle Model Implementation** | Directly addresses the intermittent demand problem by splitting it into classification and regression. This prevents the regression model from being biased by zero-inflation, significantly improving the final wSMAPE score. |
+| **`g2_hurdle/cv/tscv.py`** | **Time Series Cross-Validation**| Ensures a robust and reliable evaluation of the model's generalization performance by preventing data leakage (i.e., training on future data).                                          |
+| **`g2_hurdle/pipeline/recursion.py`** | **Recursive Forecasting Logic** | Enables accurate multi-step forecasting by dynamically updating features at each step with the latest available information (i.e., previous predictions). This yields more stable and precise long-range predictions. |
+| **`g2_hurdle/configs/`** | **Configuration Management** | Guarantees experimental reproducibility and flexibility by externalizing all hyperparameters and settings. This allows for rapid, code-free iteration on different model configurations.  |
+
+---
+
+## 📊 Results
+
+Rigorous evaluation of this codebase demonstrated a highly competitive performance, achieving a **wSMAPE score of 0.5550080421**. This result validates the effectiveness of the Hurdle Model architecture combined with sophisticated feature engineering for solving intermittent demand forecasting problems.
+
+-   **wSMAPE (Weighted Symmetric Mean Absolute Percentage Error)**: An industry-standard metric that weights errors based on the actual demand volume, preventing high-percentage errors on low-volume items from disproportionately penalizing the model's score.
+
+---
+
+## 🚀 Getting Started on Colab
+
+### 1. Prerequisites
+
+-   Python 3.8+
+-   Nvidia GPU (Recommended for training)
+
+### 2. Quickstart (Colab)
+
+```bash
+# 1. Clone the repository
+!git clone [https://github.com/shindongwoon/lgbmhurdle.git](https://github.com/shindongwoon/lgbmhurdle.git)
+%cd lgbmhurdle
+
+# 2. Install dependencies
+!python dependency.py
+
+# 3. Run model training
+!python train.py
+
+# 4. Run prediction
+!python predict.py
 ## 📜 프로젝트 개요 (Project Overview)
 
 본 프로젝트는 **간헐적 수요(Intermittent Demand)** 특성을 가진 시계열 데이터의 미래 판매량을 예측하는 것을 목표로 합니다. 간헐적 수요란 '0' 값이 빈번하게 나타나는 데이터를 의미하며, 일반적인 시계열 예측 모델로는 정확한 예측이 어렵습니다.
