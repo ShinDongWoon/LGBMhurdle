@@ -26,14 +26,12 @@
 - **설정 파일 기반 관리 (Configuration File Management)**: `YAML` 형식의 설정 파일을 통해 모델 하이퍼파라미터, 피처 목록 등을 체계적으로 관리하여 실험의 재현성을 보장합니다.
 
 ---
-
 <img width="512" height="512" alt="Gemini_Generated_Image_2m0zym2m0zym2m0z" src="https://github.com/user-attachments/assets/8bec8402-4d52-429c-873b-f8426e368281" />
 
 
 <img width="512" height="512" alt="Gemini_Generated_Image_2m0zyn2m0zyn2m0z" src="https://github.com/user-attachments/assets/680ad867-937b-4b2f-9418-93eca84c9a7b" />
 
 <img width="512" height="512" alt="Gemini_Generated_Image_2m0zyo2m0zyo2m0z" src="https://github.com/user-attachments/assets/d05af1d9-7bcb-455d-8465-ef54b263a38d" />
-
 
 ---
 ## 📊 데이터 스키마 정의 (Data Schema Definition)
