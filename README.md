@@ -70,7 +70,8 @@
 
 ### 1. 전체 코드 파이프라인 흐름
 
-![Pipeline Flow](https://i.imgur.com/gK9qASs.png)
+![Pipeline Flow](<img width="1024" height="1024" alt="Gemini_Generated_Image_2m0zym2m0zym2m0z" src="https://github.com/user-attachments/assets/b9b22538-2879-4514-874f-cfd42584fa12" />
+ttps://i.imgur.com/gK9qASs.png)
 
 1.  **초기 설정 (`configs/`)**: `base.yaml`, `korean.yaml` 등의 설정 파일을 로드하여 프로젝트 전반의 하이퍼파라미터, 데이터 경로, 사용할 피처 목록 등을 정의합니다.
 2.  **데이터 로딩 및 전처리 (`fe/preprocess.py`)**: 원본 데이터를 로드하고, 기본적인 데이터 타입 변환 및 결측치 처리 등의 전처리 과정을 수행합니다.
