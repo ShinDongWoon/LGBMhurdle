@@ -122,7 +122,7 @@
 ### 1. 요구사항 (Prerequisites)
 
 - Python 3.8+
-
+- Nvidia GPU
 
 ### 2. Quickstart (Colab)
 
