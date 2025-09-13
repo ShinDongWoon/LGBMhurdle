@@ -7,6 +7,7 @@ import pandas as pd
 from ..utils.logging import get_logger
 from ..utils.timer import Timer
 from ..utils.io import load_artifacts, load_data
+from ..utils.preprocessing import clip_negative_values
 from ..utils.keys import (
     build_series_id,
     align_to_submission,
@@ -53,8 +54,11 @@ def run_predict(cfg: dict):
             f,
             {"data": {"date_col_candidates": [schema.get("date")], "target_col_candidates": [schema.get("target")], "id_col_candidates": schema.get("series", [])}} if schema else cfg,
         )
+        schema_use = schema or _schema
         # ensure id
-        df["id"] = build_series_id(df, (schema or _schema)["series"])
+        df["id"] = build_series_id(df, schema_use["series"])
+        non_neg_cols = cfg.get("data", {}).get("non_negative_cols", [schema_use["target"]])
+        df = clip_negative_values(df, non_neg_cols)
         # context length check
         min_ctx = int(cfg.get("data", {}).get("min_context_days", 28))
         # For each id, ensure at least 28 rows
@@ -63,7 +67,6 @@ def run_predict(cfg: dict):
             raise ValueError(f"{os.path.basename(f)}: some series have < {min_ctx} days: {bad[:5]} ...")
 
         # Optionally compute features to ensure column alignment
-        schema_use = schema or _schema
         fe = run_feature_engineering(df, cfg, schema_use)
         drop_cols = [
             schema_use["date"],

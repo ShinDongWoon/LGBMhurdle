@@ -3,6 +3,25 @@ import pandas as pd
 from typing import Tuple
 
 
+def clip_negative_values(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    """Clip negative values in specified columns to zero.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input dataframe containing the columns to clip.
+    columns : list[str]
+        Column names where negative values should be clipped to zero.
+
+    Returns
+    -------
+    pd.DataFrame
+        The dataframe with negative values in ``columns`` replaced by zero.
+    """
+    df[columns] = df[columns].clip(lower=0)
+    return df
+
+
 def ensure_min_positive_ratio(
     X: pd.DataFrame, y: np.ndarray, min_ratio: float, seed: int = 42
 ) -> Tuple[pd.DataFrame, np.ndarray]:

@@ -8,7 +8,7 @@ from ..utils.logging import get_logger
 from ..utils.timer import Timer
 from ..utils.io import load_data, save_artifacts
 from ..utils.keys import build_series_id
-from ..utils.preprocessing import ensure_min_positive_ratio
+from ..utils.preprocessing import ensure_min_positive_ratio, clip_negative_values
 from ..fe import run_feature_engineering, prepare_features
 from ..cv.tscv import rolling_forecast_origin_split
 from ..model.classifier import HurdleClassifier
@@ -52,6 +52,9 @@ def run_train(cfg: dict):
         series_cols = schema["series"]
         df = df.sort_values([*series_cols, date_col]).reset_index(drop=True)
         df["id"] = build_series_id(df, series_cols)
+
+        non_neg_cols = cfg.get("data", {}).get("non_negative_cols", [target_col])
+        df = clip_negative_values(df, non_neg_cols)
 
     min_pos_ratio = float(cfg.get("data", {}).get("min_positive_ratio", 0.0))
     seed = int(cfg.get("runtime", {}).get("seed", 42))

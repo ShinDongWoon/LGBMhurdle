@@ -14,6 +14,8 @@ data:
   id_col_candidates: ["store_id","menu_id","series_id","영업장명","메뉴명"]
   min_context_days: 28
   min_positive_ratio: 0.01
+  # Columns whose values should be clipped to be non-negative before feature engineering
+  non_negative_cols: []
 
 features:
   fourier: { weekly_K: 3, yearly_K: 10 }

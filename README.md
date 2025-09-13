@@ -152,3 +152,14 @@ data:
 
 If these keys are omitted, `resolve_schema` falls back to the corresponding
 `*_col_candidates` lists to infer column names.
+
+To clip negative values before feature engineering, list the columns under
+`non_negative_cols`:
+
+```yaml
+data:
+  non_negative_cols: [sales]
+```
+
+Any negative values in these columns will be replaced with zero during both
+training and prediction.
