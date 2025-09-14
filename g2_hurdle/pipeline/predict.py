@@ -3,6 +3,7 @@ import os, glob
 import re
 import numpy as np
 import pandas as pd
+import torch
 
 from ..utils.logging import get_logger
 from ..utils.timer import Timer
@@ -90,6 +91,9 @@ def run_predict(cfg: dict):
         pred_all[test_name] = preds_df
 
     preds = pd.concat(pred_all.values(), ignore_index=True)
+    pred_cols = [c for c in preds.columns if c.startswith("D")]
+    t = torch.from_numpy(preds[pred_cols].values)
+    preds[pred_cols] = torch.round(torch.clamp(t, min=0)).to(torch.int64).numpy()
     # Load sample submission and align
     sub = pd.read_csv(sample_path, encoding="utf-8-sig", dtype=str)
     id_col = "id" if "id" in sub.columns else None
@@ -119,6 +123,10 @@ def run_predict(cfg: dict):
                 if not val.empty:
                     out.at[idx, orig_col] = val.iloc[0]
 
+        out_cols = menu_cols
+        t_out = torch.from_numpy(out[out_cols].astype(float).values)
+        out[out_cols] = torch.round(torch.clamp(t_out, min=0)).to(torch.int64).numpy()
+
         assert list(out.columns) == list(sub.columns), "Output columns differ from sample submission"
         out.to_csv(out_path, index=False, encoding="utf-8-sig")
         logger.info(f"Saved submission to {out_path}")
@@ -130,6 +138,9 @@ def run_predict(cfg: dict):
         if c not in preds.columns:
             preds[c] = np.nan
     out = align_to_submission(sub, preds[["id", *needed]], id_col="id")
+    pred_cols = [c for c in out.columns if c.startswith("D")]
+    t_out = torch.from_numpy(out[pred_cols].values)
+    out[pred_cols] = torch.round(torch.clamp(t_out, min=0)).to(torch.int64).numpy()
     assert list(out.columns) == list(sub.columns), "Output columns differ from sample submission"
     out.to_csv(out_path, index=False, encoding="utf-8-sig")
     logger.info(f"Saved submission to {out_path}")
