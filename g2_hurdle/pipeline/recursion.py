@@ -2,6 +2,7 @@
 import pandas as pd
 import numpy as np
 import numba as nb
+import torch
 
 from ..fe import prepare_features
 from ..fe.static import prepare_static_future_features
@@ -366,6 +367,10 @@ def recursive_forecast_grouped(
         )
         X_batch = dyn_batch + static_matrix[:, h - 1, :]
         yhat_batch, p_batch, q_batch = _predict_batch(X_batch, clf, reg, threshold)
+
+        yhat_batch = torch.from_numpy(yhat_batch)
+        yhat_batch = torch.round(torch.clamp(yhat_batch, min=0))
+        yhat_batch = yhat_batch.to(torch.float32).numpy()
 
         for i, sid in enumerate(series_ids):
             info = series_data[sid]
